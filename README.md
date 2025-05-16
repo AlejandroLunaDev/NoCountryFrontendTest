@@ -1,2 +1,0 @@
-# NoCountryFrontendTest
-NoCountryFrontendTest
