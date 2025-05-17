@@ -2,8 +2,14 @@
 
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { useSendMessage } from '../hooks/use-chat';
-import { PaperAirplaneIcon } from '@heroicons/react/24/solid';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  SmileIcon,
+  PaperclipIcon,
+  SendIcon,
+  PlusCircleIcon
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ChatInputProps {
   chatId: string;
@@ -15,7 +21,7 @@ export function ChatInput({ chatId }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Ajustar automáticamente la altura del textarea
+  // Auto-adjust textarea height
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -30,14 +36,14 @@ export function ChatInput({ chatId }: ChatInputProps) {
     sendMessage(chatId, message);
     setMessage('');
 
-    // Enfocar nuevamente el textarea después de enviar
+    // Re-focus textarea after sending
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enviar mensaje con Enter (sin Shift)
+    // Send message with Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -47,7 +53,7 @@ export function ChatInput({ chatId }: ChatInputProps) {
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessage(e.target.value);
 
-    // Enviar notificación de escritura con debounce
+    // Send typing notification with debounce
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
@@ -57,29 +63,74 @@ export function ChatInput({ chatId }: ChatInputProps) {
     }, 500);
   };
 
+  const handleEmojiClick = () => {
+    // Placeholder for emoji picker
+    alert('Emoji picker will be implemented soon');
+  };
+
+  const handleAttachmentClick = () => {
+    // Placeholder for file attachment
+    alert('File attachment will be implemented soon');
+  };
+
   return (
-    <div className='p-3 relative'>
-      <div className='flex items-end gap-2'>
-        <div className='relative w-full'>
+    <div className='px-4 py-3'>
+      <div className='relative bg-zinc-800 rounded-lg overflow-hidden'>
+        {/* Button row above textarea */}
+        <div className='flex items-center px-4 pt-3'>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='rounded-full h-8 w-8 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+          >
+            <PlusCircleIcon className='h-5 w-5' />
+          </Button>
+        </div>
+
+        {/* Main input area */}
+        <div className='flex items-end px-4 pb-2'>
           <Textarea
             ref={textareaRef}
             value={message}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder='Escribe un mensaje...'
-            className='resize-none min-h-[40px] max-h-[120px] pr-10 py-2.5'
+            placeholder='Enviar un mensaje...'
+            className='resize-none min-h-[22px] max-h-[120px] border-0 bg-transparent p-0 py-1 text-zinc-200 placeholder:text-zinc-400 focus-visible:ring-0 focus-visible:ring-offset-0'
             disabled={isPending}
             rows={1}
           />
+        </div>
 
-          <button
+        {/* Button row below textarea */}
+        <div className='flex items-center justify-between px-4 py-2 border-t border-zinc-700'>
+          <div className='flex gap-2'>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='rounded-full h-8 w-8 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+              onClick={handleAttachmentClick}
+            >
+              <PaperclipIcon className='h-5 w-5' />
+            </Button>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='rounded-full h-8 w-8 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+              onClick={handleEmojiClick}
+            >
+              <SmileIcon className='h-5 w-5' />
+            </Button>
+          </div>
+
+          <Button
             onClick={handleSend}
             disabled={!message.trim() || isPending}
-            className='absolute right-2 bottom-2 text-primary hover:text-primary/80 disabled:text-gray-300 disabled:cursor-not-allowed'
-            aria-label='Enviar mensaje'
+            variant='ghost'
+            size='icon'
+            className='rounded-full h-8 w-8 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed'
           >
-            <PaperAirplaneIcon className='h-5 w-5' />
-          </button>
+            <SendIcon className='h-5 w-5' />
+          </Button>
         </div>
       </div>
     </div>

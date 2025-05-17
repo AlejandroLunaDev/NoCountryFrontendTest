@@ -96,7 +96,59 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground p-4;
+    @apply bg-background text-foreground p-0 m-0;
     font-feature-settings: 'rlig' 1, 'calt' 1;
   }
+}
+
+/* Scrollbar styles for Webkit browsers */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(115, 115, 115, 0.5);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(115, 115, 115, 0.7);
+}
+
+/* Firefox scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(115, 115, 115, 0.5) transparent;
+}
+
+/* Discord-inspired channel and user hover effects */
+.channel-item {
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.channel-item:hover {
+  background-color: rgba(79, 84, 92, 0.3);
+  color: white;
+}
+
+/* Status indicators */
+.status-online {
+  background-color: #43b581;
+}
+
+.status-idle {
+  background-color: #faa61a;
+}
+
+.status-dnd {
+  background-color: #f04747;
+}
+
+.status-offline {
+  background-color: #747f8d;
 }

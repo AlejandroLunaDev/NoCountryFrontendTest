@@ -11,8 +11,8 @@ import { SocketProvider } from '@/features/chat/providers/socket-provider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'No Country - Simulaciones laborales',
-  description: 'Plataforma de simulaciones laborales No Country'
+  title: 'No Country - Chat',
+  description: 'Plataforma de chat para simulaciones laborales No Country'
 };
 
 export default function RootLayout({
@@ -21,9 +21,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang='es' suppressHydrationWarning>
+    <html lang='es' suppressHydrationWarning className='dark'>
       <body className={`${inter.className} antialiased`}>
-        <ThemeProvider defaultTheme='system' storageKey='no-country-theme'>
+        <ThemeProvider defaultTheme='dark' storageKey='no-country-theme'>
           <QueryProvider>
             <AuthProvider>
               <SocketProvider>
@@ -31,8 +31,8 @@ export default function RootLayout({
                   <div className='fixed bottom-4 right-4 z-50'>
                     <ThemeToggle />
                   </div>
-                  {children}
                   <Toaster richColors position='top-right' />
+                  {children}
                 </div>
               </SocketProvider>
             </AuthProvider>

@@ -1,4 +1,4 @@
-'use client';
+ e'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../providers/chat-provider';

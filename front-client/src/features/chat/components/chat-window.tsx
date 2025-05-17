@@ -4,17 +4,35 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useMessages } from '../hooks/use-chat';
 import { ChatInput } from './chat-input';
 import { ChatMessage } from './chat-message';
-import { ArrowLeft, MoreVertical } from 'lucide-react';
+import {
+  ArrowLeft,
+  Hash,
+  Bell,
+  Pin,
+  Users,
+  AtSign,
+  HelpCircle
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useSendMessage } from '../hooks/use-chat';
 import { useAuth } from '@/features/auth/providers/auth-provider';
+import { Separator } from '@/components/ui/separator';
+import type { Message } from '../lib/api';
 
 interface ChatWindowProps {
   chatId: string;
   chatName?: string;
   isGroup?: boolean;
   onBack?: () => void;
+}
+
+interface ProcessedMessage extends Message {
+  isFirstInGroup: boolean;
+  isLastInGroup: boolean;
+  showSender: boolean;
+  isPending: boolean;
+  senderName: string;
 }
 
 export function ChatWindow({
@@ -29,20 +47,20 @@ export function ChatWindow({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Determinar si mostrar el nombre del remitente para cada mensaje
+  // Determine if we should show the sender name for each message
   const getShouldShowSender = (
-    messages: any[],
+    messages: Message[],
     index: number,
     userId: string
   ) => {
-    // Siempre mostrar el nombre en grupos
+    // Always show name in groups
     if (isGroup) {
-      // No mostrar si es el usuario actual
+      // Don't show if it's the current user
       if (messages[index].senderId === userId) {
         return false;
       }
 
-      // Si es el primer mensaje, o el mensaje anterior no es del mismo remitente
+      // Show if it's the first message, or the previous message is not from the same sender
       if (
         index === 0 ||
         messages[index - 1].senderId !== messages[index].senderId
@@ -54,11 +72,17 @@ export function ChatWindow({
     return false;
   };
 
-  // Agrupar mensajes consecutivos del mismo usuario
+  // Group consecutive messages from the same user
   const processedMessages = useMemo(() => {
     if (!messages || !user?.id) return [];
 
-    return messages.map((message, index, arr) => {
+    // Sort messages by creation date, oldest first
+    const sortedMessages = [...messages].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    return sortedMessages.map((message, index, arr) => {
       const isFirstInGroup =
         index === 0 || arr[index - 1].senderId !== message.senderId;
 
@@ -79,18 +103,18 @@ export function ChatWindow({
         showSender,
         isPending,
         senderName
-      };
+      } as ProcessedMessage;
     });
   }, [messages, user?.id, pendingMessages, isGroup]);
 
-  // Desplazarse al último mensaje cuando se cargan nuevos mensajes
+  // Scroll to the last message when new messages are loaded
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages?.length]);
 
-  // Manejar el botón de volver
+  // Handle back button
   const handleBack = () => {
     if (onBack) {
       onBack();
@@ -100,65 +124,126 @@ export function ChatWindow({
   };
 
   return (
-    <div className='flex flex-col h-screen bg-white dark:bg-gray-900 w-full'>
-      {/* Encabezado del chat */}
-      <div className='border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between'>
+    <div className='flex flex-col h-screen bg-zinc-900 dark:bg-zinc-800 w-full'>
+      {/* Channel header */}
+      <div className='h-12 border-b dark:border-zinc-700 px-4 flex items-center justify-between bg-zinc-800 shadow-sm'>
         <div className='flex items-center'>
           <Button
             onClick={handleBack}
             variant='ghost'
             size='icon'
-            className='mr-2 lg:hidden'
+            className='mr-2 lg:hidden text-zinc-500 dark:text-zinc-400'
           >
             <ArrowLeft className='h-5 w-5' />
           </Button>
 
-          <div className='h-10 w-10 rounded-full bg-primary text-white font-medium flex items-center justify-center'>
-            {chatName.charAt(0).toUpperCase()}
-          </div>
+          {isGroup ? (
+            <Hash className='h-5 w-5 text-zinc-400 mr-2' />
+          ) : (
+            <AtSign className='h-5 w-5 text-zinc-400 mr-2' />
+          )}
 
-          <div className='ml-3'>
-            <h2 className='font-semibold'>{chatName}</h2>
-            <p className='text-xs text-gray-500'>
-              {isGroup ? 'Grupo' : 'Chat privado'}
-            </p>
-          </div>
+          <h2 className='font-semibold text-zinc-200'>{chatName}</h2>
         </div>
 
-        <Button variant='ghost' size='icon'>
-          <MoreVertical className='h-5 w-5' />
-        </Button>
+        <div className='flex items-center gap-1'>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
+          >
+            <Bell className='h-5 w-5' />
+          </Button>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
+          >
+            <Pin className='h-5 w-5' />
+          </Button>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
+          >
+            <Users className='h-5 w-5' />
+          </Button>
+          <div className='mx-2'>
+            <Separator orientation='vertical' className='h-6' />
+          </div>
+          <div className='relative'>
+            <input
+              type='text'
+              placeholder='Buscar'
+              className='h-6 bg-zinc-700 rounded-md text-xs px-2 py-1 w-40 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-200'
+            />
+          </div>
+          <Button
+            variant='ghost'
+            size='icon'
+            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
+          >
+            <HelpCircle className='h-5 w-5' />
+          </Button>
+        </div>
       </div>
 
-      {/* Área de mensajes */}
-      <div className='flex-1 overflow-y-auto p-4 space-y-3'>
+      {/* Messages area with welcome banner for empty chats */}
+      <div className='flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 pb-4 bg-zinc-900'>
         {isLoading ? (
-          <p className='text-center py-4 text-gray-500'>Cargando mensajes...</p>
+          <div className='flex items-center justify-center h-full'>
+            <div className='animate-pulse text-zinc-400'>
+              Cargando mensajes...
+            </div>
+          </div>
         ) : processedMessages.length === 0 ? (
-          <div className='h-full flex flex-col items-center justify-center text-center'>
-            <div className='text-4xl mb-3'>💬</div>
-            <h3 className='font-medium text-lg'>No hay mensajes</h3>
-            <p className='text-gray-500 text-sm mt-1'>
-              Comienza la conversación enviando un mensaje
-            </p>
+          <div className='h-full flex flex-col'>
+            {/* Welcome banner */}
+            <div className='flex-1 flex flex-col items-center justify-center px-8 text-center'>
+              <div className='w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6'>
+                {isGroup ? (
+                  <Hash className='h-8 w-8 text-primary' />
+                ) : (
+                  <AtSign className='h-8 w-8 text-primary' />
+                )}
+              </div>
+              <h3 className='font-bold text-xl mb-3 text-zinc-200'>
+                Bienvenido a {isGroup ? '#' : ''}
+                {chatName}
+              </h3>
+              <p className='text-zinc-400 max-w-md mb-6'>
+                {isGroup
+                  ? `Este es el comienzo del canal #${chatName}. Envía un mensaje para iniciar la conversación.`
+                  : `Este es el comienzo de tu conversación con ${chatName}. Envía un mensaje para comenzar.`}
+              </p>
+
+              <Button
+                variant='outline'
+                className='mt-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
+              >
+                <Users className='h-4 w-4 mr-2' />
+                Invitar usuarios
+              </Button>
+            </div>
           </div>
         ) : (
-          processedMessages.map((message: any) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              isFirstInGroup={message.isFirstInGroup}
-              isLastInGroup={message.isLastInGroup}
-              showSender={message.showSender}
-              isPending={message.isPending}
-            />
-          ))
+          <div className='pt-6 px-4 space-y-2'>
+            {processedMessages.map(message => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                isFirstInGroup={message.isFirstInGroup}
+                isLastInGroup={message.isLastInGroup}
+                isPending={message.isPending}
+              />
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Área de entrada de mensaje */}
-      <div className='border-t border-gray-200 dark:border-gray-800'>
+      {/* Message input area */}
+      <div className='border-t border-zinc-800 bg-zinc-900'>
         <ChatInput chatId={chatId} />
       </div>
     </div>
