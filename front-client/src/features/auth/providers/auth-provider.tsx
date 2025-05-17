@@ -18,7 +18,11 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (
+    email: string,
+    password: string,
+    options?: { data?: { [key: string]: any } }
+  ) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -86,10 +90,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   }
 
-  async function signUp(email: string, password: string) {
+  async function signUp(
+    email: string,
+    password: string,
+    options?: { data?: { [key: string]: any } }
+  ) {
     const { error } = await supabase.auth.signUp({
       email,
-      password
+      password,
+      options
     });
 
     return { error };

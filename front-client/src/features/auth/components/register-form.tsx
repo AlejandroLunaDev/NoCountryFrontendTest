@@ -6,6 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import Link from 'next/link';
+import { Mail, Lock, UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -17,14 +19,7 @@ import {
   FormMessage
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { useAuth } from '../providers/auth-provider';
 
 // Define el esquema de validación con zod
@@ -83,30 +78,28 @@ export function RegisterForm() {
   }
 
   return (
-    <Card className='w-full max-w-md'>
-      <CardHeader>
-        <CardTitle>Crear cuenta</CardTitle>
-        <CardDescription>
-          Registra tus datos para crear una nueva cuenta
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Card className='w-full bg-black/20 backdrop-blur-lg border-zinc-800 rounded-xl shadow-lg overflow-hidden'>
+      <div className='p-6 sm:p-8'>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-4'>
+          <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-5'>
             <FormField
               control={form.control}
               name='email'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel className='text-zinc-300'>Email</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder='tu@email.com'
-                      {...field}
-                      disabled={isLoading}
-                    />
+                    <div className='relative'>
+                      <Mail className='absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500 h-4 w-4' />
+                      <Input
+                        placeholder='tu@email.com'
+                        {...field}
+                        disabled={isLoading}
+                        className='pl-10 bg-zinc-800/50 border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder:text-zinc-500 transition-all'
+                      />
+                    </div>
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage className='text-red-400 text-sm' />
                 </FormItem>
               )}
             />
@@ -115,16 +108,20 @@ export function RegisterForm() {
               name='password'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contraseña</FormLabel>
+                  <FormLabel className='text-zinc-300'>Contraseña</FormLabel>
                   <FormControl>
-                    <Input
-                      type='password'
-                      placeholder='******'
-                      {...field}
-                      disabled={isLoading}
-                    />
+                    <div className='relative'>
+                      <Lock className='absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500 h-4 w-4' />
+                      <Input
+                        type='password'
+                        placeholder='••••••'
+                        {...field}
+                        disabled={isLoading}
+                        className='pl-10 bg-zinc-800/50 border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder:text-zinc-500 transition-all'
+                      />
+                    </div>
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage className='text-red-400 text-sm' />
                 </FormItem>
               )}
             />
@@ -133,37 +130,64 @@ export function RegisterForm() {
               name='confirmPassword'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirmar contraseña</FormLabel>
+                  <FormLabel className='text-zinc-300'>
+                    Confirmar contraseña
+                  </FormLabel>
                   <FormControl>
-                    <Input
-                      type='password'
-                      placeholder='******'
-                      {...field}
-                      disabled={isLoading}
-                    />
+                    <div className='relative'>
+                      <Lock className='absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500 h-4 w-4' />
+                      <Input
+                        type='password'
+                        placeholder='••••••'
+                        {...field}
+                        disabled={isLoading}
+                        className='pl-10 bg-zinc-800/50 border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder:text-zinc-500 transition-all'
+                      />
+                    </div>
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage className='text-red-400 text-sm' />
                 </FormItem>
               )}
             />
-            <Button type='submit' className='w-full' disabled={isLoading}>
-              {isLoading ? 'Registrando...' : 'Registrarse'}
+
+            <Button
+              type='submit'
+              disabled={isLoading}
+              className='w-full py-6 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium rounded-lg shadow-lg hover:shadow-indigo-500/20 transition-all duration-200 flex items-center justify-center gap-2'
+            >
+              {isLoading ? (
+                <>
+                  <div className='animate-spin h-5 w-5 border-2 border-white/30 border-t-white rounded-full'></div>
+                  <span>Registrando...</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus className='h-5 w-5' />
+                  <span>Registrarse</span>
+                </>
+              )}
             </Button>
+
+            <div className='pt-2'>
+              <div className='flex items-center justify-center my-4'>
+                <div className='flex-grow border-t border-zinc-700'></div>
+                <span className='mx-4 text-sm text-zinc-500'>o</span>
+                <div className='flex-grow border-t border-zinc-700'></div>
+              </div>
+
+              <p className='text-sm text-center text-zinc-400'>
+                ¿Ya tienes una cuenta?{' '}
+                <Link
+                  href='/login'
+                  className='text-indigo-400 hover:text-indigo-300 hover:underline transition-colors'
+                >
+                  Inicia sesión
+                </Link>
+              </p>
+            </div>
           </form>
         </Form>
-      </CardContent>
-      <CardFooter className='flex flex-col space-y-2'>
-        <div className='text-sm text-center'>
-          ¿Ya tienes una cuenta?{' '}
-          <Button
-            variant='link'
-            className='p-0'
-            onClick={() => router.push('/login')}
-          >
-            Inicia sesión
-          </Button>
-        </div>
-      </CardFooter>
+      </div>
     </Card>
   );
 }

@@ -4,6 +4,9 @@ import './globals.css';
 import { Toaster } from 'sonner';
 import { AuthProvider } from '@/features/auth/providers/auth-provider';
 import { ThemeProvider } from '@/features/layout/providers/theme-provider';
+import { ThemeToggle } from '@/features/layout/components/theme-toggle';
+import { QueryProvider } from '@/lib/providers/query-provider';
+import { SocketProvider } from '@/features/chat/providers/socket-provider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,12 +22,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='es' suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.className} antialiased`}>
         <ThemeProvider defaultTheme='system' storageKey='no-country-theme'>
-          <AuthProvider>
-            {children}
-            <Toaster richColors position='top-right' />
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <SocketProvider>
+                <div className='relative flex min-h-screen flex-col'>
+                  <div className='fixed bottom-4 right-4 z-50'>
+                    <ThemeToggle />
+                  </div>
+                  {children}
+                  <Toaster richColors position='top-right' />
+                </div>
+              </SocketProvider>
+            </AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>
