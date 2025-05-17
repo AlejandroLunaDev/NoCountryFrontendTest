@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { toast } from 'sonner';
 import Link from 'next/link';
 import { Mail, Lock, LogIn, Eye, EyeOff, Github } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -23,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useLoginMutation } from '../hooks/use-auth-query';
+import { showToast } from '@/components/ui/custom-toast';
 
 // Define el esquema de validación con zod
 const loginSchema = z.object({
@@ -59,26 +59,28 @@ export function LoginForm() {
       });
 
       if (error) {
-        toast.error('Error al iniciar sesión', {
-          description:
-            error.message || 'Verifica tus credenciales e intenta nuevamente'
-        });
+        showToast.error(
+          'Error al iniciar sesión',
+          error.message || 'Verifica tus credenciales e intenta nuevamente'
+        );
         return;
       }
 
-      toast.success('Inicio de sesión exitoso');
+      showToast.success('Inicio de sesión exitoso');
       router.push('/dashboard');
     } catch {
-      toast.error('Error inesperado', {
-        description: 'Ocurrió un error al procesar tu solicitud'
-      });
+      showToast.error(
+        'Error inesperado',
+        'Ocurrió un error al procesar tu solicitud'
+      );
     }
   }
 
   const handleSocialLogin = (provider: string) => {
-    toast.info(`Iniciando sesión con ${provider}`, {
-      description: 'Esta funcionalidad será implementada próximamente'
-    });
+    showToast.info(
+      `Iniciando sesión con ${provider}`,
+      'Esta funcionalidad será implementada próximamente'
+    );
   };
 
   return (
@@ -89,13 +91,6 @@ export function LoginForm() {
     >
       <Card className='w-full max-w-[450px] bg-gradient-to-b from-[#121222]/90 to-[#0a0a1a]/90 backdrop-blur-xl border border-zinc-800/50 rounded-2xl shadow-lg overflow-hidden'>
         <div className='p-8'>
-          <div className='mb-6 text-center'>
-            <h2 className='text-2xl font-bold text-white mb-1'>Bienvenido</h2>
-            <p className='text-zinc-400 text-sm'>
-              Inicia sesión para continuar
-            </p>
-          </div>
-
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(onSubmit)}

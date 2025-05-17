@@ -62,6 +62,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     const onConnect = () => {
       setStatus('connected');
       toast.success('Conectado al chat', { id: 'socket-connection' });
+
+      // Subscribe to general events when connected
+      if (session?.userId) {
+        console.log('Subscribing to notifications for user:', session.userId);
+        socket.emit('subscribe_user_notifications', session.userId);
+      }
     };
 
     // Evento de error de conexión

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useUsers } from '../hooks/use-chat';
+import { useUsers } from '../hooks/use-chat.ts';
 import {
   Dialog,
   DialogContent,

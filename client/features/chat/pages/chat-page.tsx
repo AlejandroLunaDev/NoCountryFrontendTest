@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ChatList } from '@/features/chat/components/chat-list';
 import { useEffect } from 'react';
 import { Hash, PlusIcon, Settings } from 'lucide-react';
+import { NotificationCenter } from '@/features/notifications/components/notification-center';
 
 export function ChatPage() {
   const { user, isLoading } = useAuth();
@@ -56,6 +57,11 @@ export function ChatPage() {
         <Button className='h-12 w-12 rounded-[24px] bg-zinc-700 hover:bg-green-600 hover:rounded-[16px] transition-all duration-200 flex items-center justify-center mt-2'>
           <PlusIcon className='h-6 w-6 text-green-500 hover:text-white' />
         </Button>
+
+        {/* Notification Center */}
+        <div className='mt-2'>
+          <NotificationCenter />
+        </div>
 
         {/* Settings */}
         <Button className='h-12 w-12 rounded-[24px] bg-zinc-700 hover:bg-zinc-600 hover:rounded-[16px] transition-all duration-200 flex items-center justify-center mt-auto'>

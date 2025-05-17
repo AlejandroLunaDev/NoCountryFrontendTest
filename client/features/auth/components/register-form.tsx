@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { toast } from 'sonner';
 import Link from 'next/link';
-import { Mail, Lock, UserPlus } from 'lucide-react';
+import { Mail, Lock, UserPlus, User } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -21,10 +20,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { useAuth } from '../providers/auth-provider';
+import { showToast } from '@/components/ui/custom-toast';
 
 // Define el esquema de validación con zod
 const registerSchema = z
   .object({
+    name: z.string().min(2, { message: 'Ingresa un nombre válido' }),
     email: z.string().email({ message: 'Ingresa un email válido' }),
     password: z
       .string()
@@ -46,6 +47,7 @@ export function RegisterForm() {
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      name: '',
       email: '',
       password: '',
       confirmPassword: ''
@@ -55,23 +57,28 @@ export function RegisterForm() {
   async function onSubmit(values: RegisterFormValues) {
     try {
       setIsLoading(true);
-      const { error } = await signUp(values.email, values.password);
+      const { error } = await signUp(values.email, values.password, {
+        data: { name: values.name }
+      });
 
       if (error) {
-        toast.error('Error al registrarse', {
-          description: error.message || 'Ocurrió un error al crear tu cuenta'
-        });
+        showToast.error(
+          'Error al registrarse',
+          error.message || 'Ocurrió un error al crear tu cuenta'
+        );
         return;
       }
 
-      toast.success('Registro exitoso', {
-        description: 'Revisa tu correo electrónico para confirmar tu cuenta'
-      });
+      showToast.success(
+        'Registro exitoso',
+        'Revisa tu correo electrónico para confirmar tu cuenta'
+      );
       router.push('/login');
     } catch (error) {
-      toast.error('Error inesperado', {
-        description: 'Ocurrió un error al procesar tu solicitud'
-      });
+      showToast.error(
+        'Error inesperado',
+        'Ocurrió un error al procesar tu solicitud'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -82,6 +89,27 @@ export function RegisterForm() {
       <div className='p-6 sm:p-8'>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-5'>
+            <FormField
+              control={form.control}
+              name='name'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className='text-zinc-300'>Nombre</FormLabel>
+                  <FormControl>
+                    <div className='relative'>
+                      <User className='absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-500 h-4 w-4' />
+                      <Input
+                        placeholder='Tu nombre'
+                        {...field}
+                        disabled={isLoading}
+                        className='pl-10 bg-zinc-800/50 border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-white placeholder:text-zinc-500 transition-all'
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage className='text-red-400 text-sm' />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name='email'

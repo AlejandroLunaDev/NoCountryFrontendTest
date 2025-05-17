@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ProtectedRoute } from '@/features/auth/components/protected-route';
+import { NotificationCenter } from '@/features/notifications/components/notification-center';
 
 export function DashboardPage() {
   return (
@@ -8,14 +9,20 @@ export function DashboardPage() {
         <header className='border-b bg-background sticky top-0 z-10'>
           <div className='container flex h-16 items-center justify-between py-4'>
             <div className='font-bold text-xl'>No Country</div>
-            <nav className='flex items-center gap-4'>
-              <Link href='/dashboard' className='text-sm text-muted-foreground'>
-                Simulaciones
-              </Link>
-              <Link href='/chat' className='text-sm'>
-                Chats
-              </Link>
-            </nav>
+            <div className='flex items-center gap-4'>
+              <nav className='flex items-center gap-4 mr-4'>
+                <Link
+                  href='/dashboard'
+                  className='text-sm text-muted-foreground'
+                >
+                  Simulaciones
+                </Link>
+                <Link href='/chat' className='text-sm'>
+                  Chats
+                </Link>
+              </nav>
+              <NotificationCenter />
+            </div>
           </div>
         </header>
         <div className='container flex-1 py-6'>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSocket } from '../providers/socket-provider';
 import { useAuth } from '@/features/auth/providers/auth-provider';
@@ -10,6 +10,7 @@ import socket, {
 } from '@/lib/socket';
 import { chatApi, messageApi, userApi } from '../lib/api';
 import type { User, Chat, Message } from '../lib/api';
+import { debounce } from 'lodash';
 
 // Hook para obtener usuarios
 export function useUsers() {
@@ -27,88 +28,332 @@ export function useChats() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { status } = useSocket();
+  const [hasError, setHasError] = useState(false);
+  const retryCountRef = useRef(0);
+
+  const queryKey = ['chats', user?.id];
 
   const chatsQuery = useQuery<Chat[], Error>({
-    queryKey: ['chats', user?.id],
-    queryFn: () => {
-      if (!user?.id) throw new Error('User ID is required to fetch chats.');
-      return chatApi.getUserChats(user.id);
+    queryKey,
+    queryFn: async () => {
+      try {
+        if (!user?.id) throw new Error('User ID is required to fetch chats.');
+
+        // Si ya tuvimos errores previos, incrementamos el retraso
+        if (hasError) {
+          await new Promise(resolve =>
+            setTimeout(
+              resolve,
+              Math.min(1000 * Math.pow(2, retryCountRef.current), 8000)
+            )
+          );
+          retryCountRef.current += 1;
+        }
+
+        const result = await chatApi.getUserChats(user.id);
+
+        // Si llegamos aquí sin error, resetear el contador
+        if (hasError) {
+          setHasError(false);
+          retryCountRef.current = 0;
+        }
+
+        return result;
+      } catch (error) {
+        setHasError(true);
+        console.error('Error fetching chats:', error);
+
+        // Devolver los datos existentes si tenemos
+        const existingData = queryClient.getQueryData<Chat[]>(queryKey);
+        if (existingData && existingData.length > 0) {
+          return existingData;
+        }
+
+        return [];
+      }
     },
-    enabled: !!user?.id
+    staleTime: 5000,
+    enabled: !!user?.id,
+    refetchInterval: hasError ? 5000 : status === 'connected' ? false : 15000,
+    refetchOnWindowFocus: false,
+    retry: false,
+    retryOnMount: false
   });
+
+  // Manejar errores silenciosamente
+  useEffect(() => {
+    if (chatsQuery.error) {
+      console.error('Error in chats query:', chatsQuery.error);
+      setHasError(true);
+    }
+  }, [chatsQuery.error]);
 
   useEffect(() => {
     if (status !== 'connected' || !socket || !user?.id) return;
 
     const handleNewMessage = (message: Message) => {
-      queryClient.setQueryData<Chat[]>(['chats', user.id], (oldData = []) =>
-        oldData.map(chat =>
+      // Check if this message is for a chat we have in our list
+      queryClient.setQueryData<Chat[]>(queryKey, (oldData = []) => {
+        // If we don't have the chat in our list (it was deleted), we should invalidate the query
+        // to trigger a refetch and get the chat back
+        const chatExists = oldData.some(chat => chat.id === message.chatId);
+
+        if (!chatExists) {
+          console.log(
+            'New message for previously deleted chat, refreshing chat list'
+          );
+          // Instead of trying to manually add the chat back, let's invalidate the query
+          // to get a fresh chat list from the server, which will include the previously deleted chat
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['chats'] });
+          }, 0);
+          return oldData;
+        }
+
+        // Update last message for existing chats
+        return oldData.map(chat =>
           chat.id === message.chatId ? { ...chat, lastMessage: message } : chat
-        )
-      );
+        );
+      });
+
       queryClient.setQueryData<Message[]>(
         ['messages', message.chatId],
         (oldData = []) => {
+          if (!oldData || !Array.isArray(oldData)) return [message];
           if (oldData.some(m => m.id === message.id)) return oldData;
           return [...oldData, message];
         }
       );
     };
 
+    // Handle chat deletion events from server
+    const handleChatDeleted = (data: { chatId: string; userId: string }) => {
+      console.log('Chat deleted event received:', data);
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    };
+
+    // Handle when a new chat is created or reactivated
+    const handleChatCreated = (chat: Chat) => {
+      console.log('Chat created/reactivated event received:', chat);
+      queryClient.setQueryData<Chat[]>(queryKey, (oldData = []) => {
+        if (!oldData || !Array.isArray(oldData)) return [chat];
+
+        // Check if we already have this chat
+        const chatExists = oldData.some(c => c.id === chat.id);
+        if (chatExists) return oldData;
+
+        // Add the new chat to the beginning of the list
+        return [chat, ...oldData];
+      });
+    };
+
+    // Handle when a notification arrives
+    const handleNotification = (notification: any) => {
+      console.log('Notification received:', notification);
+
+      // If it's a new message notification for a chat that was deleted,
+      // we should invalidate the chats query to get it back
+      if (notification.type === 'NEW_MESSAGE' && notification.chatId) {
+        queryClient.setQueryData<Chat[]>(queryKey, (oldData = []) => {
+          const chatExists = oldData.some(
+            chat => chat.id === notification.chatId
+          );
+          if (!chatExists) {
+            console.log('Notification for deleted chat, refreshing chat list');
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ['chats'] });
+            }, 0);
+          }
+          return oldData;
+        });
+      }
+    };
+
     socket.on('message_received', handleNewMessage);
+    socket.on('chat_deleted', handleChatDeleted);
+    socket.on('chat_created', handleChatCreated);
+    socket.on('notification', handleNotification);
 
     return () => {
       socket.off('message_received', handleNewMessage);
+      socket.off('chat_deleted', handleChatDeleted);
+      socket.off('chat_created', handleChatCreated);
+      socket.off('notification', handleNotification);
     };
   }, [queryClient, status, user?.id]);
 
   return chatsQuery;
 }
 
-// Hook para obtener los mensajes de un chat
+// Agregamos un nuevo hook para manejar los tipos de usuarios
+interface TypedUser extends User {
+  typing?: boolean;
+  lastTypingTimestamp?: number;
+}
+
+// Hook para obtener mensajes de un chat con caché optimizada
 export function useMessages(chatId: string) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { status } = useSocket();
+  const [hasError, setHasError] = useState(false);
+  const retryCountRef = useRef(0);
+  // Set para llevar registro de mensajes procesados y evitar duplicados
+  const processedMessageIds = useRef(new Set<string>());
 
-  useEffect(() => {
-    if (status === 'connected' && chatId && socket) {
-      joinChat(chatId);
-    }
-  }, [chatId, status]);
+  const queryKey = ['messages', chatId];
 
+  // Utilizamos configuraciones más permisivas para evitar problemas con API
   const messagesQuery = useQuery<Message[], Error>({
-    queryKey: ['messages', chatId],
-    queryFn: () => messageApi.getChatMessages(chatId),
-    enabled: !!chatId
+    queryKey,
+    queryFn: async () => {
+      try {
+        if (!chatId) return [];
+
+        // Si ya tuvimos errores previos, incrementamos el retraso
+        if (hasError) {
+          await new Promise(resolve =>
+            setTimeout(
+              resolve,
+              Math.min(1000 * Math.pow(2, retryCountRef.current), 10000)
+            )
+          );
+          retryCountRef.current += 1;
+        }
+
+        const result = await messageApi.getChatMessages(chatId);
+
+        // Si llegamos aquí sin error, resetear el contador
+        if (hasError) {
+          setHasError(false);
+          retryCountRef.current = 0;
+        }
+
+        return result;
+      } catch (error) {
+        setHasError(true);
+        console.error('Error fetching messages:', error);
+
+        // Devolver los datos existentes si tenemos, para evitar UI vacía
+        const existingData = queryClient.getQueryData<Message[]>(queryKey);
+        if (existingData && existingData.length > 0) {
+          return existingData;
+        }
+
+        return [];
+      }
+    },
+    staleTime: 3000, // 3 segundos es suficiente
+    enabled: !!chatId && !!user?.id,
+    refetchInterval: hasError ? 5000 : status === 'connected' ? false : 10000, // Diferentes intervalos según estado
+    refetchOnWindowFocus: false, // Evita refetch en focus para prevenir bucles
+    retry: false, // Manejamos nuestro propio sistema de reintento
+    retryOnMount: false
   });
 
   useEffect(() => {
-    if (status !== 'connected' || !chatId || !socket) return;
+    if (status !== 'connected' || !socket || !user?.id) return;
 
-    const handleNewMessage = (message: Message) => {
+    // Unirse al chat para recibir mensajes
+    joinChat(chatId);
+
+    const handleMessageReceived = (message: Message) => {
       if (message.chatId !== chatId) return;
-      queryClient.setQueryData<Message[]>(
-        ['messages', chatId],
-        (oldData = []) => {
-          if (oldData.some(m => m.id === message.id)) return oldData;
-          return [...oldData, message];
+
+      // Verificar si ya hemos procesado este mensaje (por ID)
+      if (processedMessageIds.current.has(message.id)) {
+        console.log('Mensaje duplicado detectado, ignorando:', message.id);
+        return;
+      }
+
+      // Marcar el mensaje como procesado
+      processedMessageIds.current.add(message.id);
+
+      // Usamos setQueryData de forma segura para prevenir bucles
+      queryClient.setQueryData<Message[]>(queryKey, (oldData = []) => {
+        // Verificar si los datos antiguos son un array válido
+        if (!Array.isArray(oldData)) {
+          return [message];
         }
-      );
+
+        // Verificamos que ya no exista este mensaje por ID
+        const messageExists = oldData.some(m => m.id === message.id);
+
+        // También verificamos por contenido y timestamp para casos de mensajes temporales
+        const similarMessage =
+          !messageExists &&
+          oldData.some(
+            m =>
+              m.content === message.content &&
+              m.senderId === message.senderId &&
+              Math.abs(
+                new Date(m.createdAt).getTime() -
+                  new Date(message.createdAt).getTime()
+              ) < 5000
+          );
+
+        if (messageExists || similarMessage) {
+          // Si existe o hay uno similar, actualizamos en lugar de añadir
+          return oldData.map(m => {
+            if (
+              m.id === message.id ||
+              (similarMessage &&
+                m.content === message.content &&
+                m.senderId === message.senderId)
+            ) {
+              return message; // Reemplazar con la versión más reciente
+            }
+            return m;
+          });
+        }
+
+        // Si es nuevo, lo añadimos
+        return [...oldData, message];
+      });
+
+      // Marcar mensaje como leído si no es nuestro
+      if (message.senderId !== user.id) {
+        socket.emit('read_message', {
+          messageId: message.id,
+          userId: user.id,
+          chatId: message.chatId
+        });
+      }
     };
 
-    const handleTyping = (data: { userId: string; userName: string }) => {
-      console.log(`${data.userName} está escribiendo en ${chatId}...`);
-      // Aquí puedes implementar la lógica para mostrar "está escribiendo..."
+    const handleMessageRead = (data: { messageId: string; userId: string }) => {
+      queryClient.setQueryData<Message[]>(queryKey, (oldData = []) => {
+        if (!oldData.length) return oldData;
+
+        return oldData.map(msg => {
+          if (msg.id === data.messageId && !msg.readBy.includes(data.userId)) {
+            return {
+              ...msg,
+              readBy: [...msg.readBy, data.userId]
+            };
+          }
+          return msg;
+        });
+      });
     };
 
-    socket.on('message_received', handleNewMessage);
-    socket.on('user_typing', handleTyping);
+    // Suscribirse a eventos de mensajes
+    socket.on('message_received', handleMessageReceived);
+    socket.on('message_read', handleMessageRead);
 
     return () => {
-      socket.off('message_received', handleNewMessage);
-      socket.off('user_typing', handleTyping);
+      socket.off('message_received', handleMessageReceived);
+      socket.off('message_read', handleMessageRead);
     };
-  }, [chatId, queryClient, status]);
+  }, [chatId, queryClient, status, user?.id]);
+
+  // Manejar errores silenciosamente
+  useEffect(() => {
+    if (messagesQuery.error) {
+      console.error('Error in messages query:', messagesQuery.error);
+      setHasError(true);
+    }
+  }, [messagesQuery.error]);
 
   return messagesQuery;
 }
@@ -129,12 +374,15 @@ export function useSendMessage() {
   const { status } = useSocket();
   const { user } = useAuth() as {
     user: (AuthUser & { name?: string | null }) | null;
-  }; // Type assertion temporal
+  };
   const queryClient = useQueryClient();
-
   const [pendingMessages, setPendingMessages] = useState<
     Record<string, { content: string; tempId: string }>
   >({});
+  // Evitar múltiples actualizaciones para un solo mensaje
+  const pendingOpsRef = useRef<Set<string>>(new Set());
+  // Rastrear mensajes enviados para evitar duplicados
+  const sentMessagesRef = useRef<Map<string, string>>(new Map()); // Key: content+timestamp, Value: tempId
 
   const sendMessageMutation = useMutation<
     SendMessageMutationResponse,
@@ -158,98 +406,176 @@ export function useSendMessage() {
         return { success: true };
       }
     },
-    onSuccess: (data, variables) => {
-      if (data && data.id && user) {
-        const messageFromApi = data as Message;
+    onSuccess: (response, { tempId, chatId }) => {
+      // Evitar múltiples actualizaciones para el mismo tempId
+      if (pendingOpsRef.current.has(tempId)) return;
+      pendingOpsRef.current.add(tempId);
+
+      // Limpiar este mensaje de pendientes
+      setPendingMessages(prev => {
+        const newState = { ...prev };
+        delete newState[tempId];
+        return newState;
+      });
+
+      // Si tenemos una respuesta con ID, actualizar los mensajes locales
+      if (response.id) {
         queryClient.setQueryData<Message[]>(
-          ['messages', variables.chatId],
-          (old = []) => {
-            return old.map(msg =>
-              msg.id === variables.tempId
-                ? {
-                    ...messageFromApi,
-                    sender: {
-                      id: user.id,
-                      name: user.name || user.email?.split('@')[0] || 'Usuario'
-                    }
-                  }
-                : msg
-            );
+          ['messages', chatId],
+          (oldData = []) => {
+            if (!Array.isArray(oldData)) return oldData;
+
+            // Reemplazar mensaje temporal con el real, o añadir si no existe
+            let updated = false;
+            const updatedMessages = oldData.map(msg => {
+              if (msg.id === tempId) {
+                updated = true;
+                return {
+                  ...msg,
+                  id: response.id!,
+                  createdAt: response.createdAt || msg.createdAt
+                };
+              }
+              return msg;
+            });
+
+            // Si no se encontró y reemplazó, no añadimos nada más
+            // (el socket event debería manejarlo)
+            return updated ? updatedMessages : oldData;
           }
-        );
-        queryClient.setQueryData<Chat[]>(['chats', user?.id], (oldChats = []) =>
-          oldChats.map(chat =>
-            chat.id === variables.chatId
-              ? { ...chat, lastMessage: messageFromApi }
-              : chat
-          )
         );
       }
 
-      setPendingMessages(prev => {
-        const newPendingMessages = { ...prev };
-        delete newPendingMessages[variables.tempId];
-        return newPendingMessages;
-      });
+      // Limpiar el pendingOp después de un breve delay
+      setTimeout(() => {
+        pendingOpsRef.current.delete(tempId);
+      }, 500);
     },
-    onError: (error, variables) => {
-      console.error('Error al enviar mensaje:', error);
-      setPendingMessages(prev => {
-        const newPendingMessages = { ...prev };
-        delete newPendingMessages[variables.tempId];
-        return newPendingMessages;
-      });
+    onError: (error, { tempId, chatId, content }) => {
+      // Marcar el mensaje como fallido
       queryClient.setQueryData<Message[]>(
-        ['messages', variables.chatId],
-        (old = []) =>
-          old.map(msg =>
-            msg.id === variables.tempId ? { ...msg, isError: true } : msg
-          )
+        ['messages', chatId],
+        (oldData = []) => {
+          if (!Array.isArray(oldData)) return oldData;
+          return oldData.map(msg =>
+            msg.id === tempId ? { ...msg, error: true } : msg
+          );
+        }
       );
+
+      console.error('Error al enviar mensaje:', error);
     }
   });
 
+  // Función para enviar mensajes sin duplicados
+  const sendMessageRef =
+    useRef<(chatId: string, content: string, replyToId?: string) => void>();
+  sendMessageRef.current = (
+    chatId: string,
+    content: string,
+    replyToId?: string
+  ) => {
+    if (!content.trim() || !chatId || !user?.id) return;
+
+    const now = new Date().toISOString();
+    const messageKey = `${content}-${chatId}-${user.id}-${now.substring(
+      0,
+      16
+    )}`;
+
+    // Verificar si un mensaje similar ya fue enviado en los últimos segundos
+    if (sentMessagesRef.current.has(messageKey)) {
+      console.log('Mensaje duplicado detectado, ignorando envío', content);
+      return;
+    }
+
+    const tempId = `temp-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    // Registrar este mensaje para evitar duplicados
+    sentMessagesRef.current.set(messageKey, tempId);
+
+    // Limpiar el registro después de un tiempo
+    setTimeout(() => {
+      sentMessagesRef.current.delete(messageKey);
+    }, 10000);
+
+    // Optimistic update
+    queryClient.setQueryData<Message[]>(['messages', chatId], (old = []) => {
+      if (!Array.isArray(old)) return [createTempMessage()];
+
+      // Verificar si el mensaje ya existe por contenido
+      const isDuplicate = old.some(
+        m =>
+          m.content === content &&
+          m.senderId === user.id &&
+          new Date(m.createdAt).getTime() > Date.now() - 10000
+      );
+
+      if (isDuplicate) {
+        console.log('Mensaje similar ya existe, no añadiendo duplicado');
+        return old;
+      }
+
+      return [...old, createTempMessage()];
+    });
+
+    sendMessageMutation.mutate({ chatId, content, tempId, replyToId });
+
+    // Función local para crear el mensaje temporal
+    function createTempMessage(): Message {
+      return {
+        id: tempId,
+        content,
+        senderId: user!.id,
+        chatId,
+        createdAt: now,
+        replyToId,
+        sender: {
+          id: user!.id,
+          name: user!.name || user!.email?.split('@')[0] || 'Usuario'
+        },
+        readBy: [user!.id]
+      } as Message;
+    }
+  };
+
   const sendMessage = useCallback(
     (chatId: string, content: string, replyToId?: string) => {
-      if (!content.trim() || !chatId || !user?.id) return;
-
-      const tempId = `temp-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-
-      queryClient.setQueryData<Message[]>(['messages', chatId], (old = []) => [
-        ...old,
-        {
-          id: tempId,
-          content,
-          senderId: user.id,
-          chatId,
-          createdAt: new Date().toISOString(),
-          replyToId,
-          sender: {
-            id: user.id,
-            name: user.name || user.email?.split('@')[0] || 'Usuario'
-          }
-        } as Message
-      ]);
-
-      sendMessageMutation.mutate({ chatId, content, tempId, replyToId });
+      sendMessageRef.current?.(chatId, content, replyToId);
     },
-    [queryClient, sendMessageMutation, user]
+    []
+  );
+
+  // Función para enviar indicador de typing con debounce para reducir tráfico
+  const sendTypingDebounced = useMemo(
+    () =>
+      debounce((chatId: string) => {
+        if (status === 'connected' && user?.id && socket) {
+          socket.emit('typing', {
+            chatId,
+            userId: user.id,
+            userName: user.name || user.email?.split('@')[0] || 'Usuario'
+          });
+        }
+      }, 500),
+    [status, user, socket]
   );
 
   const sendTyping = useCallback(
     (chatId: string) => {
-      if (status === 'connected' && user?.id && socket) {
-        socket.emit('typing', {
-          chatId,
-          userId: user.id,
-          userName: user.name || user.email?.split('@')[0] || 'Usuario'
-        });
-      }
+      sendTypingDebounced(chatId);
     },
-    [status, user]
+    [sendTypingDebounced]
   );
+
+  useEffect(() => {
+    // Limpia debounce al desmontar
+    return () => {
+      sendTypingDebounced.cancel();
+    };
+  }, [sendTypingDebounced]);
 
   return {
     sendMessage,
@@ -263,6 +589,7 @@ export function useSendMessage() {
 export function useCreateChat() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { status, socket } = useSocket();
 
   return useMutation<
     Chat,
@@ -273,36 +600,120 @@ export function useCreateChat() {
       if (!user?.id) throw new Error('User not authenticated');
 
       const finalUserIds = [...new Set([...userIds, user.id])];
+
+      console.log('Creating chat with:', {
+        userIds: finalUserIds,
+        name: name || null,
+        type
+      });
+
+      // Check for existing 1-on-1 chat with the same participants
       if (type === 'INDIVIDUAL' && finalUserIds.length === 2) {
+        console.log('Checking for existing 1-on-1 chat with:', finalUserIds);
+
+        // Get cached chats
         const chats =
           queryClient.getQueryData<Chat[]>(['chats', user.id]) || [];
-        const existingChat = chats.find(
-          chat =>
-            !chat.isGroup &&
-            chat.members.length === 2 &&
-            chat.members.every(member =>
-              finalUserIds.includes(member.userId)
-            ) &&
-            finalUserIds.every(id =>
-              chat.members.some(member => member.userId === id)
-            )
-        );
-        if (existingChat) return existingChat;
+
+        // Look for existing 1-on-1 chat with exactly these two members
+        const existingChat = chats.find(chat => {
+          if (chat.isGroup) return false;
+          if (chat.members.length !== 2) return false;
+
+          // Check if both users are in this chat
+          const memberIds = chat.members.map(m => m.userId);
+          return (
+            finalUserIds.every(id => memberIds.includes(id)) &&
+            memberIds.every(id => finalUserIds.includes(id))
+          );
+        });
+
+        if (existingChat) {
+          console.log('Found existing chat:', existingChat);
+          return existingChat;
+        }
       }
 
+      // No existing chat found, create a new one
+      console.log('Creating new chat with members:', finalUserIds);
+
       return chatApi.createChat({
-        name,
+        name: name || null, // Explicitly set to null if undefined
         type,
         memberIds: finalUserIds
       });
     },
     onSuccess: newChat => {
+      console.log('Chat created successfully:', newChat);
+
+      // Update the query cache with the new chat
       queryClient.setQueryData<Chat[]>(['chats', user?.id], (oldData = []) => {
-        if (oldData.some(chat => chat.id === newChat.id)) return oldData;
+        // Don't add duplicate chats
+        if (oldData.some(chat => chat.id === newChat.id)) {
+          console.log('Chat already exists in cache, not adding duplicate');
+          return oldData;
+        }
+
+        console.log('Adding new chat to cache');
         return [newChat, ...oldData];
       });
+
+      // If we're connected to socket, emit an event to join this chat
+      if (status === 'connected' && socket) {
+        console.log('Joining new chat via socket:', newChat.id);
+        socket.emit('join_chat', newChat.id);
+      }
+    },
+    onError: error => {
+      console.error('Error creating chat:', error);
     }
   });
+}
+
+// Handle chat restoration after deletion
+export function useHandleDeletedChats() {
+  const { socket, status } = useSocket();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!socket || !user?.id || status !== 'connected') return;
+
+    // When a new message is received, check if the chat exists
+    const handleNewMessage = (message: Message) => {
+      console.log('Checking if chat exists for message:', message);
+
+      // Get current chats
+      const currentChats =
+        queryClient.getQueryData<Chat[]>(['chats', user.id]) || [];
+
+      // If chat doesn't exist in our list, we need to fetch it
+      if (!currentChats.some(chat => chat.id === message.chatId)) {
+        console.log('Message for deleted chat detected, will refetch chats');
+
+        // Force a refetch of chats
+        queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
+
+        // Also explicitly join this chat
+        socket.emit('join_chat', message.chatId);
+      }
+    };
+
+    socket.on('message_received', handleNewMessage);
+
+    // Also listen for explicit chat_restored events
+    socket.on('chat_restored', (chatId: string) => {
+      console.log('Chat restored event received for:', chatId);
+      queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
+    });
+
+    return () => {
+      socket.off('message_received', handleNewMessage);
+      socket.off('chat_restored');
+    };
+  }, [socket, status, user?.id, queryClient]);
+
+  return null;
 }
 
 // Temporal: definir un tipo base para AuthUser si no lo tienes importable

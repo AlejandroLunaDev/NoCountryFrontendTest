@@ -1,6 +1,6 @@
 'use client';
 
-import { useChats, useCreateChat } from '../hooks/use-chat';
+import { useChats, useCreateChat } from '../hooks/use-chat.ts';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -17,7 +17,7 @@ import {
   LogOut,
   UserPlus
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -27,9 +27,10 @@ import { Avatar } from '@/components/ui/avatar';
 import { AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { ChatChannelItem } from './chat-channel-item';
 
 export function ChatList() {
-  const { data: chats, isLoading } = useChats();
+  const { data: chats, isLoading, refetch } = useChats();
   const createChatMutation = useCreateChat();
   const [filter, setFilter] = useState('');
   const router = useRouter();
@@ -39,6 +40,26 @@ export function ChatList() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+
+  // Force refetch when the component is mounted or when the user changes
+  useEffect(() => {
+    if (user?.id) {
+      console.log('Refreshing chat list for user:', user.id);
+      refetch();
+    }
+  }, [user?.id, refetch]);
+
+  // Also refetch periodically to catch any missed updates
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      if (user?.id) {
+        console.log('Periodic chat list refresh');
+        refetch();
+      }
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(refreshInterval);
+  }, [user?.id, refetch]);
 
   const handleChatSelect = (chatId: string) => {
     router.push(`/chat/${chatId}`);
@@ -258,18 +279,14 @@ export function ChatList() {
               ) : (
                 // List of group channels
                 groupChats.map(chat => (
-                  <Button
+                  <ChatChannelItem
                     key={chat.id}
-                    variant='ghost'
-                    className={cn(
-                      'w-full justify-start px-2 py-2 h-auto text-sm font-medium rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700',
-                      'relative'
-                    )}
+                    id={chat.id}
+                    name={chat.name || 'Canal'}
+                    isActive={false}
                     onClick={() => handleChatSelect(chat.id)}
-                  >
-                    <Hash className='w-4 h-4 mr-2 flex-shrink-0' />
-                    <span className='truncate'>{chat.name || 'Canal'}</span>
-                  </Button>
+                    unseenCount={0}
+                  />
                 ))
               )}
             </div>
@@ -303,40 +320,15 @@ export function ChatList() {
                     displayName = otherMember?.name || 'Usuario';
                   }
 
-                  // Get online status
-                  const isOnline = chat.members.some(
-                    m => m.userId !== user?.id && (m as any).status === 'ONLINE'
-                  );
-
-                  // Get initials for avatar
-                  const initials = displayName
-                    .split(' ')
-                    .map(n => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .substring(0, 2);
-
                   return (
-                    <Button
+                    <ChatChannelItem
                       key={chat.id}
-                      variant='ghost'
-                      className='w-full justify-start px-2 py-1.5 h-auto text-sm rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700'
+                      id={chat.id}
+                      name={displayName}
+                      isActive={false}
                       onClick={() => handleChatSelect(chat.id)}
-                    >
-                      <div className='flex items-center w-full'>
-                        <div className='relative mr-2'>
-                          <Avatar className='h-7 w-7'>
-                            <AvatarFallback className='bg-zinc-700 text-zinc-300 text-xs'>
-                              {initials}
-                            </AvatarFallback>
-                          </Avatar>
-                          {isOnline && (
-                            <span className='absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-zinc-900'></span>
-                          )}
-                        </div>
-                        <span className='truncate'>{displayName}</span>
-                      </div>
-                    </Button>
+                      unseenCount={0}
+                    />
                   );
                 })
               ) : (
