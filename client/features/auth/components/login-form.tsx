@@ -118,7 +118,7 @@ export function LoginForm() {
                           placeholder='tu@email.com'
                           {...field}
                           disabled={isLoading}
-                          className='pl-4 h-12 bg-[#1e1e32] border-[#2a2a45] text-white placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all'
+                          className='pl-11 h-12 bg-[#1e1e32] border-[#2a2a45] text-white placeholder:text-zinc-500 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all'
                         />
                       </div>
                     </FormControl>
