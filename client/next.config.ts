@@ -1,19 +1,18 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
   serverRuntimeConfig: {
     PORT: 3001
-  },
-  experimental: {
-    serverActions: true
   },
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3000/api/:path*'
+        destination: 'http://localhost:8080/api/:path*'
       }
     ];
   }
+  /* config options here */
 };
 
 export default nextConfig;
