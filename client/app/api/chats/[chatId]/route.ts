@@ -14,12 +14,16 @@ interface ChatMemberFromSupabase {
   users: User[];
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: { chatId: string } }
-) {
+interface RouteContext {
+  params: {
+    chatId: string;
+  };
+}
+
+export async function GET(request: Request, context: RouteContext) {
   try {
     const supabase = createClient();
+    const { params } = context;
     const chatId = params.chatId;
 
     // Verificar si el usuario está autenticado
