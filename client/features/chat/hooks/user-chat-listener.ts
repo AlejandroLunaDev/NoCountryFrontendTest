@@ -123,7 +123,7 @@ export function useChatListener() {
                 icon: '/favicon.ico',
                 tag: serverNotification.chatId, // Tag to group notifications
                 renotify: true // Re-notify for new messages in the same chat
-              });
+              } as NotificationOptions & { renotify: boolean });
               browserNotification.onclick = () => {
                 window.focus();
                 if (
