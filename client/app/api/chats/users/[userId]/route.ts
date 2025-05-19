@@ -32,13 +32,14 @@ interface ChatFromSupabase {
   // lastMessage will be added in the map, so not part of initial fetch type for this var
 }
 
-export async function GET(
-  request: Request,
-  { params }: { params: { userId: string } }
-) {
+export async function GET(request: Request) {
   try {
     const supabase = createClient();
-    const userId = params.userId;
+
+    // Get userId from URL path
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const userId = pathParts[pathParts.length - 1];
 
     // Verificar si el usuario está autenticado
     const {
