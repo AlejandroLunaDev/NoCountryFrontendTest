@@ -512,8 +512,9 @@ export function useSendMessage() {
   });
 
   // Función para enviar mensajes sin duplicados
-  const sendMessageRef =
-    useRef<(chatId: string, content: string, replyToId?: string) => void>();
+  const sendMessageRef = useRef<
+    ((chatId: string, content: string, replyToId?: string) => void) | null
+  >(null);
   sendMessageRef.current = (
     chatId: string,
     content: string,
