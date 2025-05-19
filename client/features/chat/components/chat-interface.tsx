@@ -13,47 +13,89 @@ import { useMarkChatAsRead } from '../hooks/use-chat';
 import { usePresence } from '../providers/presence-provider';
 import type { ChatMember } from '../lib/api';
 
-interface MessageItemProps {
-  message: Message;
-  isCurrentUser: boolean;
+// Define a custom message type that works with our UI
+interface UIMessage {
+  id: string;
+  content: string;
+  createdAt: string;
+  userId: string;
+  chatId: string;
+  user: {
+    name: string;
+    id?: string;
+    userId?: string;
+  };
 }
 
-function MessageItem({ message, isCurrentUser }: MessageItemProps) {
+interface MessageItemProps {
+  message: UIMessage;
+  isCurrentUser: boolean;
+  previousMessage?: UIMessage | null;
+}
+
+function MessageItem({
+  message,
+  isCurrentUser,
+  previousMessage
+}: MessageItemProps) {
   if (!message.user) return null;
 
   const messageDate = new Date(message.createdAt);
   const formattedTime = format(messageDate, 'HH:mm');
-  const formattedDate = format(messageDate, "d 'de' MMMM", { locale: es });
+
+  // Is this a new group of messages?
+  const isNewGroup =
+    !previousMessage ||
+    previousMessage.userId !== message.userId ||
+    new Date(message.createdAt).getTime() -
+      new Date(previousMessage.createdAt).getTime() >
+      300000;
 
   return (
-    <div className='flex items-start mb-4'>
-      {!isCurrentUser && (
-        <Avatar className='w-10 h-10 rounded-full mr-3 bg-zinc-300'>
-          <div className='w-full h-full flex items-center justify-center'>
-            {message.user.name.substring(0, 2).toUpperCase()}
-          </div>
-        </Avatar>
+    <div
+      className={cn(
+        'hover:bg-[#2e3035]/50 py-0.5',
+        isNewGroup ? 'mt-4 pt-1' : 'mt-0'
       )}
-      <div
-        className={cn('flex flex-col max-w-[70%]', isCurrentUser && 'ml-auto')}
-      >
-        <div className='flex items-center'>
-          {!isCurrentUser && (
-            <span className='font-semibold text-sm'>{message.user.name}</span>
+    >
+      <div className='relative flex w-full'>
+        {/* Avatar - show only for first message in a group */}
+        {isNewGroup ? (
+          <div className='flex-shrink-0 mr-4 pt-1 w-10'>
+            <Avatar className='h-10 w-10 rounded-full'>
+              <div className='w-full h-full flex items-center justify-center bg-zinc-700 rounded-full text-white'>
+                {message.user.name.substring(0, 2).toUpperCase()}
+              </div>
+            </Avatar>
+          </div>
+        ) : (
+          <div className='flex-shrink-0 mr-4 w-10'>
+            {/* Empty space to align with avatar */}
+          </div>
+        )}
+
+        <div className='flex-1 min-w-0'>
+          {/* Show username and timestamp for first message in group */}
+          {isNewGroup && (
+            <div className='flex items-center mb-1'>
+              <span
+                className={cn(
+                  'font-medium text-sm',
+                  isCurrentUser ? 'text-[#7289da]' : 'text-[#e67e22]'
+                )}
+              >
+                {message.user.name}
+              </span>
+              <span className='ml-2 text-xs text-[#72767d]'>
+                {formattedTime}
+              </span>
+            </div>
           )}
-          <span className='text-xs text-zinc-500 ml-2'>
-            {formattedTime} • {formattedDate}
-          </span>
-        </div>
-        <div
-          className={cn(
-            'mt-1 rounded-lg py-2 px-3 text-sm',
-            isCurrentUser
-              ? 'bg-primary text-white rounded-tr-none'
-              : 'bg-zinc-200 dark:bg-zinc-700 rounded-tl-none'
-          )}
-        >
-          {message.content}
+
+          {/* Message content */}
+          <div className='text-[#dcddde] break-words text-sm'>
+            {message.content}
+          </div>
         </div>
       </div>
     </div>
@@ -70,27 +112,18 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
   const { user } = useAuth();
   const { isUserOnline } = usePresence();
 
-  // Función para obtener el nombre a mostrar para un chat individual
   const getChatDisplayName = (chat: Chat) => {
-    // Para chats grupales, mostrar el nombre del grupo
     if (chat.type === 'GROUP') {
       return chat.name || 'Grupo';
     }
 
-    // Para chats individuales, mostrar el nombre del otro usuario
     if (chat.members && Array.isArray(chat.members)) {
-      // Buscar el miembro que no es el usuario actual
       const otherMember = chat.members.find(m => m.userId !== user?.id);
-
-      // Usar nombre del objeto user anidado, email, o un fallback
       if (otherMember) {
-        // Usar el nombre del miembro
         return otherMember.name || 'Usuario';
       }
-
       return 'Usuario';
     }
-
     return chat.name || 'Chat';
   };
 
@@ -126,7 +159,6 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
           {chats
             .filter(c => c.type === 'PRIVATE')
             .map(chat => {
-              // Detectar si algún miembro está online
               const hasOnlineMember =
                 chat.members &&
                 chat.members.some(
@@ -158,11 +190,7 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
   );
 }
 
-interface MemberSidebarProps {
-  members: ChatMember[];
-}
-
-function MemberSidebar({ members }: MemberSidebarProps) {
+function MemberSidebar({ members }: { members: ChatMember[] }) {
   return (
     <div className='w-60 bg-zinc-800 border-l border-zinc-700 p-4'>
       <h3 className='text-xs font-semibold text-zinc-400 mb-2'>
@@ -189,7 +217,7 @@ function MemberSidebar({ members }: MemberSidebarProps) {
 }
 
 export function ChatInterface({ chatId }: { chatId: string }) {
-  const { chats, currentChat, selectChat, sendMessage, isLoading } = useChat();
+  const { chats, currentChat, selectChat, sendMessage } = useChat();
   const { user } = useAuth();
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -198,19 +226,14 @@ export function ChatInterface({ chatId }: { chatId: string }) {
   const markChatAsRead = useMarkChatAsRead();
   const { updatePresence } = usePresence();
 
-  // Inicializar la altura del textarea
+  // Handle textarea height adjustment
   useEffect(() => {
     if (textareaRef.current) {
       const textarea = textareaRef.current;
-
-      // Reset height
       textarea.style.height = 'auto';
-
-      // Calcular si el texto tiene una o múltiples líneas
       const lineCount = (textarea.value.match(/\n/g) || []).length + 1;
       const newHeight = Math.min(textarea.scrollHeight, 150);
 
-      // Aplicar scroll solo si hay múltiples líneas
       if (lineCount > 1 || newHeight > 24) {
         textarea.classList.remove('overflow-hidden');
         textarea.classList.add('overflow-y-auto');
@@ -223,43 +246,31 @@ export function ChatInterface({ chatId }: { chatId: string }) {
     }
   }, [messageInput]);
 
-  // Función para obtener el nombre a mostrar para un chat individual
   const getChatDisplayName = (chat: Chat) => {
-    // Para chats grupales, mostrar el nombre del grupo
     if (chat.type === 'GROUP') {
       return chat.name || 'Grupo';
     }
 
-    // Para chats individuales, mostrar el nombre del otro usuario
     if (chat.members && Array.isArray(chat.members)) {
-      // Buscar el miembro que no es el usuario actual
       const otherMember = chat.members.find(m => m.userId !== user?.id);
-
-      // Usar nombre del miembro
       if (otherMember) {
         return otherMember.name || 'Usuario';
       }
-
-      return 'Usuario';
     }
-
     return chat.name || 'Chat';
   };
 
-  // Scroll automático cuando llegan mensajes nuevos
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [currentChat?.messages]);
 
-  // Agregar un useEffect para marcar el chat como leído cuando se carga
   useEffect(() => {
     if (chatId && user?.id) {
-      // Marcar el chat como leído cuando el usuario entra
       markChatAsRead.mutate({ chatId, userId: user.id });
     }
-  }, [chatId, user?.id]);
+  }, [chatId, user?.id, currentChat?.messages, markChatAsRead]);
 
   const handleSelectChat = (chatId: string) => {
     selectChat(chatId);
@@ -269,13 +280,29 @@ export function ChatInterface({ chatId }: { chatId: string }) {
     e.preventDefault();
     if (!messageInput.trim() || !currentChat) return;
 
-    // Actualizar presencia al enviar un mensaje
     updatePresence();
 
     setIsSending(true);
-    await sendMessage(messageInput.trim());
-    setMessageInput('');
-    setIsSending(false);
+    try {
+      await sendMessage(currentChat.id, messageInput);
+      setMessageInput('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // Prepare messages for UI display
+  const prepareMessages = (messages: Message[]): UIMessage[] => {
+    return messages.map(msg => ({
+      ...msg,
+      user: {
+        name: msg.user?.name || 'Unknown',
+        id: msg.user?.id,
+        userId: msg.userId
+      }
+    }));
   };
 
   return (
@@ -298,19 +325,19 @@ export function ChatInterface({ chatId }: { chatId: string }) {
         selectedChatId={currentChat?.id || null}
       />
 
-      {/* Área del chat */}
-      <div className='flex-1 flex flex-col'>
+      {/* Área principal del chat - Estilo Discord */}
+      <div className='flex-1 flex flex-col bg-[#313338]'>
         {currentChat ? (
           <>
             {/* Header del chat */}
-            <div className='h-14 border-b flex items-center px-4'>
+            <div className='h-12 border-b border-[#1e1f22] flex items-center px-4'>
               <div className='flex items-center'>
-                <span className='font-semibold text-lg'>
+                <span className='font-medium text-white text-base'>
                   {currentChat.type === 'GROUP'
                     ? `# ${currentChat.name}`
                     : getChatDisplayName(currentChat)}
                 </span>
-                <span className='ml-2 text-zinc-500 text-sm'>
+                <span className='ml-2 text-[#b8b9bf] text-sm'>
                   {currentChat.type === 'GROUP'
                     ? 'Chat grupal'
                     : 'Chat privado'}
@@ -318,84 +345,126 @@ export function ChatInterface({ chatId }: { chatId: string }) {
               </div>
             </div>
 
-            {/* Mensajes */}
-            <div className='flex-1 overflow-y-auto p-4 space-y-4'>
+            {/* Área de mensajes - Estilo Discord */}
+            <div className='flex-1 overflow-y-auto bg-[#36393f] px-4'>
               {currentChat.messages.length === 0 ? (
                 <div className='flex flex-col items-center justify-center h-full text-center'>
-                  <p className='text-zinc-500 mb-2'>No hay mensajes aún</p>
-                  <p className='text-zinc-400 text-sm'>
+                  <div className='h-16 w-16 rounded-full bg-[#2f3136] flex items-center justify-center mb-4'>
+                    <svg
+                      className='h-8 w-8 text-[#b9bbbe]'
+                      xmlns='http://www.w3.org/2000/svg'
+                      width='24'
+                      height='24'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                    >
+                      <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' />
+                    </svg>
+                  </div>
+                  <p className='text-white text-lg font-semibold mb-1'>
+                    ¡No hay mensajes aún!
+                  </p>
+                  <p className='text-[#b9bbbe] text-sm'>
                     Sé el primero en enviar un mensaje a este chat
                   </p>
                 </div>
               ) : (
-                currentChat.messages.map(message => (
+                prepareMessages(currentChat.messages).map((message, index) => (
                   <MessageItem
                     key={message.id}
                     message={message}
                     isCurrentUser={message.userId === user?.id}
+                    previousMessage={
+                      index > 0
+                        ? prepareMessages(currentChat.messages)[index - 1]
+                        : null
+                    }
                   />
                 ))
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input de mensaje */}
-            <form
-              onSubmit={handleSendMessage}
-              className='p-4 border-t chat-interface'
-            >
-              <div className='bg-zinc-100 dark:bg-zinc-700 rounded-lg px-4 py-2 flex items-center'>
-                <textarea
-                  ref={textareaRef}
-                  placeholder={`Enviar un mensaje a ${
-                    currentChat.type === 'GROUP'
-                      ? `#${currentChat.name}`
-                      : getChatDisplayName(currentChat)
-                  }`}
-                  className='bg-transparent flex-1 outline-none text-sm w-full resize-none overflow-hidden min-h-[24px] max-h-[150px]'
-                  value={messageInput}
-                  onChange={e => {
-                    setMessageInput(e.target.value);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e);
-                    }
-                  }}
-                  disabled={isSending}
-                  rows={1}
-                />
-                <Button
-                  type='submit'
-                  size='icon'
-                  variant='ghost'
-                  className='ml-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 flex-shrink-0'
-                  disabled={isSending || !messageInput.trim()}
-                >
-                  <svg
-                    xmlns='http://www.w3.org/2000/svg'
-                    width='20'
-                    height='20'
-                    viewBox='0 0 24 24'
-                    fill='none'
-                    stroke='currentColor'
-                    strokeWidth='2'
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    className='lucide lucide-send'
+            {/* Input de mensaje - Estilo Discord */}
+            <div className='px-4 pb-6 pt-2'>
+              <form
+                onSubmit={handleSendMessage}
+                className='bg-[#40444b] rounded-lg overflow-hidden'
+              >
+                <div className='px-4 py-3 flex items-center'>
+                  <textarea
+                    ref={textareaRef}
+                    placeholder={`Enviar un mensaje a ${
+                      currentChat.type === 'GROUP'
+                        ? `#${currentChat.name}`
+                        : getChatDisplayName(currentChat)
+                    }`}
+                    className='bg-transparent flex-1 outline-none text-[#dcddde] w-full resize-none overflow-hidden min-h-[22px] max-h-[150px] placeholder-[#72767d] text-sm'
+                    value={messageInput}
+                    onChange={e => {
+                      setMessageInput(e.target.value);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e);
+                      }
+                    }}
+                    disabled={isSending}
+                    rows={1}
+                  />
+
+                  <Button
+                    type='submit'
+                    size='icon'
+                    variant='ghost'
+                    className='ml-2 text-[#b9bbbe] hover:text-white flex-shrink-0 h-8 w-8'
+                    disabled={isSending || !messageInput.trim()}
                   >
-                    <path d='m22 2-7 20-4-9-9-4Z' />
-                    <path d='M22 2 11 13' />
-                  </svg>
-                </Button>
-              </div>
-            </form>
+                    <svg
+                      xmlns='http://www.w3.org/2000/svg'
+                      width='18'
+                      height='18'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      className='lucide lucide-send'
+                    >
+                      <path d='m22 2-7 20-4-9-9-4Z' />
+                      <path d='M22 2 11 13' />
+                    </svg>
+                  </Button>
+                </div>
+              </form>
+            </div>
           </>
         ) : (
-          <div className='flex flex-col items-center justify-center h-full text-center p-4'>
-            <h3 className='text-xl font-bold mb-2'>Selecciona un chat</h3>
-            <p className='text-zinc-500 max-w-md'>
+          <div className='flex flex-col items-center justify-center h-full text-center p-4 bg-[#313338]'>
+            <svg
+              className='h-16 w-16 text-[#72767d] mb-4'
+              xmlns='http://www.w3.org/2000/svg'
+              width='24'
+              height='24'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+            >
+              <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' />
+            </svg>
+            <h3 className='text-xl font-bold mb-2 text-white'>
+              Selecciona un chat
+            </h3>
+            <p className='text-[#b8b9bf] max-w-md'>
               Selecciona un chat de la lista a la izquierda para ver tus
               mensajes o iniciar una nueva conversación
             </p>
@@ -403,8 +472,10 @@ export function ChatInterface({ chatId }: { chatId: string }) {
         )}
       </div>
 
-      {/* Sidebar - Miembros (solo si hay un chat seleccionado) */}
-      {currentChat && <MemberSidebar members={currentChat.members} />}
+      {/* Sidebar - Miembros */}
+      {currentChat && currentChat.members && (
+        <MemberSidebar members={currentChat.members} />
+      )}
     </div>
   );
 }

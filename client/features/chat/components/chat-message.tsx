@@ -56,65 +56,59 @@ export function ChatMessage({
   return (
     <div
       className={cn(
-        'flex gap-2 p-4',
-        isCurrentUser ? 'justify-end' : 'justify-start',
-        !isLastInGroup && 'pb-1',
-        !isFirstInGroup && 'pt-1'
+        'hover:bg-[#2e3035]/50 py-0.5 w-full',
+        isFirstInGroup ? 'mt-4' : 'mt-0'
       )}
     >
-      {!isCurrentUser && isFirstInGroup && (
-        <Avatar className='h-8 w-8'>
-          <AvatarImage src={`https://ui-avatars.com/api/?name=${sender}`} />
-          <AvatarFallback>{getInitials()}</AvatarFallback>
-        </Avatar>
-      )}
-
-      {!isCurrentUser && !isFirstInGroup && <div className='w-8' />}
-
-      <div
-        className={cn(
-          'flex flex-col max-w-[75%]',
-          isCurrentUser && 'items-end'
-        )}
-      >
-        {isFirstInGroup && !isCurrentUser && (
-          <div className='text-xs font-medium text-zinc-500 mb-1'>{sender}</div>
+      <div className='relative flex w-full'>
+        {/* Avatar - mostrar solo para el primer mensaje en un grupo */}
+        {isFirstInGroup ? (
+          <div className='flex-shrink-0 mr-3 pt-1 w-9'>
+            <Avatar className='h-8 w-8 rounded-full'>
+              <AvatarImage src={`https://ui-avatars.com/api/?name=${sender}`} />
+              <AvatarFallback className='text-xs'>
+                {getInitials()}
+              </AvatarFallback>
+            </Avatar>
+          </div>
+        ) : (
+          <div className='flex-shrink-0 mr-3 w-9'>
+            {/* Espacio vacío para alinear con el avatar */}
+          </div>
         )}
 
-        <div
-          className={cn(
-            'rounded-lg px-3 py-2 text-sm break-words overflow-wrap-anywhere overflow-hidden',
-            isCurrentUser
-              ? 'bg-indigo-600 text-white'
-              : 'bg-zinc-700 text-zinc-100'
+        <div className='flex-1 min-w-0'>
+          {/* Mostrar nombre de usuario y timestamp para primer mensaje del grupo */}
+          {isFirstInGroup && (
+            <div className='flex items-center mb-0.5'>
+              <span
+                className={cn(
+                  'font-medium text-sm',
+                  isCurrentUser ? 'text-[#7289da]' : 'text-[#e67e22]'
+                )}
+              >
+                {sender}
+              </span>
+              <span className='ml-1.5 text-xs text-[#72767d]'>
+                {formattedTime}
+              </span>
+            </div>
           )}
-        >
-          {content}
-        </div>
 
-        <div className='flex items-center mt-1 space-x-2'>
-          <span className='text-xs text-zinc-500'>{formattedTime}</span>
+          {/* Contenido del mensaje */}
+          <div className='text-[#dcddde] break-words text-sm'>{content}</div>
 
-          {isCurrentUser && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    {isPending ? (
-                      <Check className='h-3 w-3 text-zinc-500' />
-                    ) : (
-                      <CheckCheck className='h-3 w-3 text-indigo-400' />
-                    )}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side='top'
-                  className='bg-zinc-800 text-white border-zinc-700'
-                >
-                  <p className='text-xs'>Enviado</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          {/* Mostrar check de enviado solo si es el último mensaje en un grupo y es del usuario actual */}
+          {isLastInGroup && isCurrentUser && (
+            <div className='flex justify-start mt-1'>
+              <span className='text-xs text-[#72767d]'>
+                {isPending ? (
+                  <Check className='h-3 w-3' />
+                ) : (
+                  <CheckCheck className='h-3 w-3 text-[#7289da]' />
+                )}
+              </span>
+            </div>
           )}
         </div>
       </div>
