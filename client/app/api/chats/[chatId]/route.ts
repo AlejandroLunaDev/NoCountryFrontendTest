@@ -14,13 +14,14 @@ interface ChatMemberFromSupabase {
   users: User[];
 }
 
-export async function GET(
-  req: Request,
-  { params }: { params: { chatId: string } }
-) {
+export async function GET(request: Request) {
   try {
     const supabase = createClient();
-    const chatId = params.chatId;
+
+    // Get chatId from URL path
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const chatId = pathParts[pathParts.length - 1];
 
     // Verificar si el usuario está autenticado
     const {
