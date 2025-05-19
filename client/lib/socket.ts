@@ -53,22 +53,22 @@ if (typeof window !== 'undefined') {
   if (DEBUG) {
     socket.onAny((event, ...args) => {
       console.log(`[Socket Event] ${event}:`, args);
-    });
+  });
 
-    socket.on('connect', () => {
-      console.log('[IMPORTANT] Socket connected with ID:', socket.id);
-      logSocketState();
-    });
+  socket.on('connect', () => {
+    console.log('[IMPORTANT] Socket connected with ID:', socket.id);
+    logSocketState();
+  });
 
-    socket.on('connect_error', error => {
-      console.error('[IMPORTANT] Socket connection error:', error);
-      logSocketState();
-    });
+  socket.on('connect_error', error => {
+    console.error('[IMPORTANT] Socket connection error:', error);
+    logSocketState();
+  });
 
-    socket.on('disconnect', reason => {
-      console.warn('[IMPORTANT] Socket disconnected:', reason);
-      logSocketState();
-    });
+  socket.on('disconnect', reason => {
+    console.warn('[IMPORTANT] Socket disconnected:', reason);
+    logSocketState();
+  });
   }
 }
 

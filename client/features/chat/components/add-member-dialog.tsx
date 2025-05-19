@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { useUsers } from '../hooks/use-chat.ts';
+import { useAddMemberToChat } from '../hooks/use-chat.ts';
 import {
   Dialog,
   DialogContent,
@@ -13,57 +14,29 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Search, User, AlertCircle, Loader2, Check } from 'lucide-react';
+import { Search, UserPlus, AlertCircle, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { Avatar } from '@/components/ui/avatar';
 import { AvatarFallback } from '@/components/ui/avatar';
-import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import { Chat } from '../lib/api';
 
-interface UserSelectDialogProps {
-  onSelectUser: (userId: string) => void;
+interface AddMemberDialogProps {
+  chatId: string;
+  currentMembers: string[];
   trigger?: React.ReactNode;
-  id?: string;
-  allowMultiple?: boolean;
-  selectedUsers?: string[];
-  onCreateChat?: (
-    isGroup: boolean,
-    userIds: string[],
-    groupName: string
-  ) => void;
 }
 
-export function UserSelectDialog({
-  onSelectUser,
-  trigger,
-  id,
-  allowMultiple = true,
-  selectedUsers = [],
-  onCreateChat
-}: UserSelectDialogProps) {
+export function AddMemberDialog({
+  chatId,
+  currentMembers,
+  trigger
+}: AddMemberDialogProps) {
   const { data: users, isLoading, error, refetch } = useUsers();
+  const addMemberMutation = useAddMemberToChat();
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
-  const [groupName, setGroupName] = useState('');
-
-  // Reset selections when dialog opens
-  useEffect(() => {
-    if (open) {
-      setSelectedUserIds([]);
-      setGroupName('');
-    }
-  }, [open]);
-
-  // Handle dialog opening
-  useEffect(() => {
-    if (open && error) {
-      toast.error('Error al cargar usuarios', {
-        description: 'Verifica tu conexión e intenta nuevamente'
-      });
-    }
-  }, [open, error]);
 
   const handleRetry = async () => {
     setIsRetrying(true);
@@ -76,46 +49,39 @@ export function UserSelectDialog({
     }
   };
 
-  const filteredUsers = useMemo(() => {
-    if (!users) return [];
-    return users.filter(user => {
-      const searchLower = search.toLowerCase();
-      return (
-        user.name?.toLowerCase().includes(searchLower) ||
-        user.email?.toLowerCase().includes(searchLower)
-      );
-    });
-  }, [users, search]);
+  // Filtrar usuarios eliminando los que ya son miembros
+  const availableUsers = Array.isArray(users)
+    ? users
+        .filter(user => !currentMembers.includes(user.id))
+        .filter(user => {
+          if (!search) return true;
+          const searchTerm = search.toLowerCase();
+          return (
+            (user.name || '').toLowerCase().includes(searchTerm) ||
+            (user.email || '').toLowerCase().includes(searchTerm)
+          );
+        })
+    : [];
 
-  const handleSelectUser = (userId: string) => {
-    setSelectedUserIds(prev => {
-      // Toggle selection: remove if already selected, add if not
-      if (prev.includes(userId)) {
-        return prev.filter(id => id !== userId);
-      } else {
-        return [...prev, userId];
-      }
-    });
+  const handleAddMember = async (userId: string) => {
+    try {
+      await addMemberMutation.mutateAsync({ chatId, userId });
+      setOpen(false);
+    } catch (error) {
+      console.error('Error adding member:', error);
+    }
   };
 
-  const handleCreateChat = () => {
-    if (!onCreateChat || selectedUserIds.length === 0) return;
-
-    const isGroup = selectedUserIds.length > 1;
-    onCreateChat(isGroup, selectedUserIds, isGroup ? groupName : '');
-    setOpen(false);
-  };
-
-  // Get initials from a name or email
+  // Obtener iniciales para el avatar
   const getInitials = (nameOrEmail: string) => {
     if (!nameOrEmail) return 'U';
 
-    // If it's an email, use the first character before @
+    // Si es email, usar la primera letra antes del @
     if (nameOrEmail.includes('@')) {
       return nameOrEmail.split('@')[0].charAt(0).toUpperCase();
     }
 
-    // For names, get initials for first and last names
+    // Para nombres, obtener iniciales de nombres y apellidos
     return nameOrEmail
       .split(' ')
       .map(n => n[0])
@@ -126,40 +92,26 @@ export function UserSelectDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild id={id}>
+      <DialogTrigger asChild>
         {trigger || (
           <Button
             size='sm'
-            className='rounded-full bg-zinc-700 hover:bg-zinc-600 text-white'
+            variant='ghost'
+            className='h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-700'
           >
-            <Plus className='h-4 w-4 mr-2' />
-            Nuevo mensaje
+            <UserPlus className='h-4 w-4' />
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className='sm:max-w-md bg-zinc-800 border-zinc-700 text-white'>
         <DialogHeader>
           <DialogTitle className='text-xl text-white'>
-            {selectedUserIds.length > 1 ? 'Crear grupo' : 'Nuevo mensaje'}
+            Añadir miembro al grupo
           </DialogTitle>
           <DialogDescription className='text-zinc-400'>
-            {selectedUserIds.length > 1
-              ? 'Selecciona usuarios para tu grupo'
-              : 'Selecciona un usuario para chatear'}
+            Busca y selecciona usuarios para añadir al chat grupal
           </DialogDescription>
         </DialogHeader>
-
-        {selectedUserIds.length > 1 && (
-          <div className='space-y-2'>
-            <label className='text-sm text-zinc-400'>Nombre del grupo</label>
-            <Input
-              placeholder='Nombre del grupo'
-              value={groupName}
-              onChange={e => setGroupName(e.target.value)}
-              className='bg-zinc-700 border-zinc-600'
-            />
-          </div>
-        )}
 
         <div className='relative my-4'>
           <Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400' />
@@ -172,7 +124,7 @@ export function UserSelectDialog({
         </div>
 
         <div className='max-h-[300px] overflow-y-auto space-y-1 mt-2 rounded-md'>
-          {isLoading || isRetrying ? (
+          {isLoading || addMemberMutation.isPending || isRetrying ? (
             Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className='flex items-center gap-3 p-3 rounded-md'>
                 <Skeleton className='h-9 w-9 rounded-full bg-zinc-700' />
@@ -207,35 +159,33 @@ export function UserSelectDialog({
                 )}
               </Button>
             </div>
-          ) : !filteredUsers?.length ? (
+          ) : !availableUsers?.length ? (
             <div className='text-center py-6'>
               <Search className='h-10 w-10 text-zinc-500 mb-2 mx-auto' />
               <p className='text-white font-medium'>
-                No se encontraron resultados
+                No se encontraron usuarios disponibles
               </p>
               <p className='text-sm text-zinc-400'>
                 {search
                   ? 'Intenta con otros términos de búsqueda'
-                  : 'No hay usuarios disponibles'}
+                  : 'Todos los usuarios ya son miembros de este chat'}
               </p>
             </div>
           ) : (
-            filteredUsers.map(user => (
+            availableUsers.map(user => (
               <Button
                 key={user.id}
                 variant='ghost'
-                className={cn(
-                  'w-full justify-start p-3 h-auto rounded-md hover:bg-zinc-700 text-zinc-300 hover:text-white',
-                  selectedUserIds.includes(user.id) && 'bg-zinc-700 text-white'
-                )}
-                onClick={() => handleSelectUser(user.id)}
+                className='w-full justify-start p-3 h-auto rounded-md hover:bg-zinc-700 text-zinc-300 hover:text-white'
+                onClick={() => handleAddMember(user.id)}
+                disabled={addMemberMutation.isPending}
               >
                 <Avatar className='h-9 w-9 mr-3'>
                   <AvatarFallback className='bg-zinc-600 text-zinc-200'>
                     {getInitials(user.name || user.email)}
                   </AvatarFallback>
                 </Avatar>
-                <div className='text-left flex-1'>
+                <div className='text-left'>
                   <p className='font-medium text-white'>
                     {user.name || user.email?.split('@')[0] || 'Usuario'}
                   </p>
@@ -243,32 +193,19 @@ export function UserSelectDialog({
                     <p className='text-xs text-zinc-400'>{user.email}</p>
                   )}
                 </div>
-                {selectedUserIds.includes(user.id) && (
-                  <Check className='h-5 w-5 text-green-500' />
-                )}
               </Button>
             ))
           )}
         </div>
 
         <DialogFooter className='mt-4'>
-          <div className='flex justify-between items-center w-full'>
-            <div className='text-sm text-zinc-400'>
-              {selectedUserIds.length} usuario
-              {selectedUserIds.length !== 1 && 's'} seleccionado
-              {selectedUserIds.length !== 1 && 's'}
-            </div>
-            <Button
-              onClick={handleCreateChat}
-              disabled={
-                selectedUserIds.length === 0 ||
-                (selectedUserIds.length > 1 && !groupName.trim())
-              }
-              className='bg-primary'
-            >
-              {selectedUserIds.length > 1 ? 'Crear grupo' : 'Iniciar chat'}
-            </Button>
-          </div>
+          <Button
+            variant='ghost'
+            onClick={() => setOpen(false)}
+            className='text-zinc-400 hover:text-white hover:bg-zinc-700'
+          >
+            Cancelar
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

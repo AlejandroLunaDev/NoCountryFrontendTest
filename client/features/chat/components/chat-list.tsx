@@ -5,12 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Search,
   Plus,
-  AtSign,
   ChevronDown,
   Headphones,
   Mic,
-  LogOut,
-  UserPlus
+  LogOut
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -22,7 +20,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { AvatarFallback } from '@/components/ui/avatar';
 import { ChatChannelItem } from './chat-channel-item';
 import { useChats, useCreateChat } from '../hooks/use-chat.ts';
-import type { Chat as ApiChat } from '../lib/api';
+import type { Chat as ApiChat, Message } from '../lib/api';
+import socket from '@/lib/socket';
 
 // Use explicitly extended interface to avoid type errors
 interface ExtendedChatMember {
@@ -43,117 +42,25 @@ export function ChatList() {
   const { user, signOut } = useAuth();
   const [isGroupChannelsOpen, setIsGroupChannelsOpen] = useState(true);
   const [isPrivateChannelsOpen, setIsPrivateChannelsOpen] = useState(true);
-  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
-  // Force refetch when the component is mounted or when the user changes
+  // Reducir los re-fetches a solo cuando es necesario
   useEffect(() => {
     if (user?.id) {
       refetch();
     }
-  }, [user?.id, refetch]);
+  }, [user?.id, refetch]); // Solo cuando cambia el usuario, no en cada montaje
 
-  // Also refetch periodically to catch any missed updates - but less frequently
   useEffect(() => {
-    const refreshInterval = setInterval(() => {
-      if (user?.id) {
-        refetch();
-      }
-    }, 60000); // Refresh every 60 seconds instead of 30 to reduce load
-
-    return () => clearInterval(refreshInterval);
-  }, [user?.id, refetch]);
-
-  const handleChatSelect = (chatId: string) => {
-    router.push(`/chat/${chatId}`);
-    setCurrentChatId(chatId);
-  };
-
-  const handleUserSelect = async (
-    selectedUserId: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    unusedParam: string
-  ) => {
-    if (!user?.id) {
-      toast.error('No se puede crear chat', {
-        description: 'Necesitas iniciar sesión'
-      });
-      return;
+    // Actualizar currentChatId cuando cambia la ruta
+    const chatIdFromPath = window.location.pathname.split('/').pop();
+    if (chatIdFromPath && chatIdFromPath !== 'chat') {
+      setCurrentChatId(chatIdFromPath);
     }
+  }, []); // Solo al montar, no es necesario en cada renderizado
 
-    if (isCreatingGroup) {
-      // Add user to group selection
-      setSelectedUsers(prev => {
-        if (prev.includes(selectedUserId)) return prev;
-        return [...prev, selectedUserId];
-      });
-      return;
-    }
-
-    try {
-      // Cuando se crea un chat individual (1 a 1), no es necesario establecer el nombre
-      // porque lo estableceremos dinámicamente en la función getChatDisplayName
-      const newChat = await createChatMutation.mutateAsync({
-        userIds: [selectedUserId],
-        name: '', // En lugar de null, usar string vacío
-        type: 'INDIVIDUAL'
-      });
-
-      toast.success('Chat creado con éxito');
-      router.push(`/chat/${newChat.id}`);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Error creating chat:', error);
-      toast.error('Error al crear chat', {
-        description: 'Inténtalo nuevamente'
-      });
-    }
-  };
-
-  const handleCreateGroupChat = async () => {
-    if (!groupName.trim() || selectedUsers.length === 0) {
-      toast.error('Información incompleta', {
-        description: 'Necesitas un nombre de grupo y al menos un usuario'
-      });
-      return;
-    }
-
-    try {
-      const newChat = await createChatMutation.mutateAsync({
-        userIds: selectedUsers,
-        name: groupName,
-        type: 'GROUP'
-      });
-
-      toast.success('Grupo creado con éxito');
-      setIsCreatingGroup(false);
-      setGroupName('');
-      setSelectedUsers([]);
-      router.push(`/chat/${newChat.id}`);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Error creating group:', error);
-      toast.error('Error al crear grupo', {
-        description: 'Inténtalo nuevamente'
-      });
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      router.push('/login');
-      toast.success('Sesión cerrada');
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Error signing out:', error);
-      toast.error('Error al cerrar sesión');
-    }
-  };
-
-  // Memoize filtered chats to avoid recalculating on every render
+  // Memoize filtered chats
   const filteredChats = useMemo(() => {
     return Array.isArray(chats)
       ? chats.filter(chat => {
@@ -173,45 +80,156 @@ export function ChatList() {
       : [];
   }, [chats, filter]);
 
-  // Memoize the separated chats to avoid recalculation
+  // Memoize separated chats
   const { groupChats, privateChats } = useMemo(() => {
+    // Verificamos que existan chats primero para evitar errores
+    if (
+      !filteredChats ||
+      !Array.isArray(filteredChats) ||
+      filteredChats.length === 0
+    ) {
+      return { groupChats: [], privateChats: [] };
+    }
+
+    // Usamos type en lugar de isGroup para la clasificación
     return {
-      groupChats: filteredChats.filter(chat => chat.isGroup),
-      privateChats: filteredChats.filter(chat => !chat.isGroup)
+      groupChats: filteredChats.filter(chat => chat.type === 'GROUP'),
+      privateChats: filteredChats.filter(chat => chat.type === 'INDIVIDUAL')
     };
   }, [filteredChats]);
 
+  // Display debug info only in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('ChatList - Current chats:', {
+        all: chats,
+        groups: groupChats,
+        private: privateChats,
+        currentId: currentChatId
+      });
+    }
+  }, [chats, groupChats, privateChats, currentChatId]);
+
+  // Escuchar mensajes nuevos para actualizar los contadores de no leídos
+  useEffect(() => {
+    if (!socket || !user?.id) return;
+
+    const handleNewMessage = (message: Message) => {
+      // Si el mensaje no es del usuario actual y no es del chat activo, incrementar contador
+      if (message.senderId !== user.id && message.chatId !== currentChatId) {
+        setUnreadCounts(prev => ({
+          ...prev,
+          [message.chatId]: (prev[message.chatId] || 0) + 1
+        }));
+
+        // Si estamos en desarrollo, mostrar log de depuración
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Nuevo mensaje recibido, actualizando contador:', {
+            chatId: message.chatId,
+            from: message.senderId,
+            content: message.content,
+            unreadCounts: {
+              ...unreadCounts,
+              [message.chatId]: (unreadCounts[message.chatId] || 0) + 1
+            }
+          });
+        }
+      }
+    };
+
+    // Escuchar evento de mensaje recibido
+    socket.on('message_received', handleNewMessage);
+
+    return () => {
+      socket.off('message_received', handleNewMessage);
+    };
+  }, [user?.id, currentChatId, unreadCounts]);
+
+  const handleChatSelect = (chatId: string) => {
+    router.push(`/chat/${chatId}`);
+    setCurrentChatId(chatId);
+
+    // Resetear contador de mensajes no leídos para este chat
+    if (unreadCounts[chatId]) {
+      setUnreadCounts(prev => ({
+        ...prev,
+        [chatId]: 0
+      }));
+
+      // Informar al servidor que se han leído los mensajes
+      if (socket && user?.id) {
+        socket.emit('read_chat', {
+          chatId,
+          userId: user.id
+        });
+      }
+    }
+  };
+
+  const handleCreateChat = async (
+    isGroup: boolean,
+    userIds: string[],
+    groupName: string
+  ) => {
+    if (!user?.id || userIds.length === 0) {
+      toast.error('No se puede crear chat', {
+        description:
+          'Necesitas iniciar sesión y seleccionar al menos un usuario'
+      });
+      return;
+    }
+
+    try {
+      const newChat = await createChatMutation.mutateAsync({
+        userIds: userIds,
+        name: isGroup ? groupName : '',
+        type: isGroup ? 'GROUP' : 'INDIVIDUAL'
+      });
+
+      toast.success(
+        isGroup ? 'Grupo creado con éxito' : 'Chat creado con éxito'
+      );
+      router.push(`/chat/${newChat.id}`);
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      toast.error('Error al crear chat', {
+        description: 'Inténtalo nuevamente'
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.push('/login');
+      toast.success('Sesión cerrada');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Error al cerrar sesión');
+    }
+  };
+
   const getChatDisplayName = (chat: ApiChat): string => {
-    // Para chats grupales, usar el nombre del grupo
-    if (chat.isGroup) {
-      return chat.name || 'Grupo';
+    // Para chats grupales, SIEMPRE usar el name del chat
+    if (chat.type === 'GROUP') {
+      return chat.name || 'Grupo sin nombre'; // Si es grupo, SIEMPRE retornar el nombre del grupo
     }
 
     // Para chats individuales (1 a 1), mostrar el nombre del otro usuario
     if (chat.members) {
-      // Buscar el miembro que no es el usuario actual
       const otherMember = chat.members.find(m => m.userId !== user?.id) as
         | ExtendedChatMember
         | undefined;
 
-      // Usar nombre del objeto user anidado, email, o un fallback
       if (otherMember) {
-        // El nombre está en otherMember.user.name
-        if (otherMember.user && otherMember.user.name)
-          return otherMember.user.name;
-
-        // Fallback a email si existe
-        if (otherMember.user && otherMember.user.email)
+        if (otherMember.user?.name) return otherMember.user.name;
+        if (otherMember.user?.email)
           return otherMember.user.email.split('@')[0];
-
-        // Fallback si no hay user o name
         if (otherMember.name) return otherMember.name;
       }
-
       return 'Usuario';
     }
 
-    // Fallback por si no hay información suficiente
     return chat.name || 'Chat';
   };
 
@@ -240,73 +258,22 @@ export function ChatList() {
           </div>
         </div>
 
-        {/* Add Group Chat button */}
+        {/* Nuevo Mensaje Button */}
         <div className='px-2 mt-2'>
           <Button
-            className='w-full bg-zinc-700 hover:bg-zinc-600 text-white'
+            className='w-full bg-zinc-700 hover:bg-zinc-600 text-white flex items-center justify-center gap-2'
             size='sm'
-            onClick={() => setIsCreatingGroup(true)}
+            onClick={() => {
+              const trigger = document.querySelector(
+                '.new-message-trigger'
+              ) as HTMLButtonElement;
+              if (trigger) trigger.click();
+            }}
           >
-            <UserPlus className='mr-2 h-4 w-4' />
-            Crear Grupo
+            <Plus className='h-4 w-4' />
+            <span>Nuevo Mensaje</span>
           </Button>
         </div>
-
-        {isCreatingGroup && (
-          <div className='p-3 my-2 mx-2 bg-zinc-800 rounded-md'>
-            <h3 className='text-sm font-semibold text-white mb-2'>
-              Nuevo Grupo
-            </h3>
-            <Input
-              placeholder='Nombre del grupo'
-              className='mb-2 bg-zinc-700 border-zinc-600'
-              value={groupName}
-              onChange={e => setGroupName(e.target.value)}
-            />
-            <div className='flex flex-wrap gap-1 mb-2'>
-              {selectedUsers.length > 0 && (
-                <div className='text-xs text-zinc-400 mb-1 w-full'>
-                  {selectedUsers.length} usuarios seleccionados
-                </div>
-              )}
-            </div>
-            <div className='flex gap-2'>
-              <Button
-                size='sm'
-                variant='ghost'
-                className='text-zinc-400'
-                onClick={() => {
-                  setIsCreatingGroup(false);
-                  setGroupName('');
-                  setSelectedUsers([]);
-                }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                size='sm'
-                className='bg-primary'
-                onClick={() => {
-                  // Trigger user select dialog
-                  const trigger = document.querySelector(
-                    '.new-message-trigger'
-                  ) as HTMLButtonElement;
-                  if (trigger) trigger.click();
-                }}
-              >
-                Añadir Usuarios
-              </Button>
-              <Button
-                size='sm'
-                className='bg-green-600 hover:bg-green-700'
-                onClick={handleCreateGroupChat}
-                disabled={!groupName.trim() || selectedUsers.length === 0}
-              >
-                Crear
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Group Channels */}
         <div className='mt-4'>
@@ -325,7 +292,6 @@ export function ChatList() {
           {isGroupChannelsOpen && (
             <div className='mt-1 space-y-0.5 px-2'>
               {isLoading ? (
-                // Skeletons for loading state
                 <>
                   <Skeleton className='h-8 w-full bg-zinc-800' />
                   <Skeleton className='h-8 w-full bg-zinc-800' />
@@ -335,17 +301,16 @@ export function ChatList() {
                   No hay canales
                 </p>
               ) : (
-                // List of group channels
                 groupChats.map(chat => (
                   <ChatChannelItem
                     key={chat.id}
                     id={chat.id}
-                    name={chat.name || getChatDisplayName(chat)}
-                    isGroup={true}
+                    name={getChatDisplayName(chat)}
+                    isGroup={chat.type === 'GROUP'}
                     members={chat.members || []}
                     isActive={currentChatId === chat.id}
                     onClick={() => handleChatSelect(chat.id)}
-                    unseenCount={chat.unreadCount || 0}
+                    unseenCount={unreadCounts[chat.id] || chat.unreadCount || 0}
                   />
                 ))
               )}
@@ -369,61 +334,22 @@ export function ChatList() {
 
           {isPrivateChannelsOpen && (
             <div className='mt-1 space-y-0.5 px-2'>
-              {privateChats.length > 0 ? (
-                privateChats.map(chat => (
+              {privateChats
+                .filter(chat => chat.type === 'INDIVIDUAL')
+                .map(chat => (
                   <ChatChannelItem
                     key={chat.id}
                     id={chat.id}
-                    name={chat.name || getChatDisplayName(chat)}
-                    isGroup={false}
+                    name={getChatDisplayName(chat)}
+                    isGroup={chat.type === 'GROUP'}
                     members={chat.members || []}
                     isActive={currentChatId === chat.id}
                     onClick={() => handleChatSelect(chat.id)}
-                    unseenCount={chat.unreadCount || 0}
+                    unseenCount={unreadCounts[chat.id] || chat.unreadCount || 0}
                   />
-                ))
-              ) : (
-                <div className='flex items-center justify-between px-1 py-2'>
-                  <span className='text-xs text-zinc-500'>
-                    No hay mensajes directos
-                  </span>
-                  <Button
-                    variant='ghost'
-                    size='icon'
-                    className='h-6 w-6 rounded-full text-zinc-500 hover:text-white hover:bg-zinc-700'
-                    onClick={() => {
-                      const trigger = document.querySelector(
-                        '.new-message-trigger'
-                      ) as HTMLButtonElement;
-                      if (trigger) trigger.click();
-                    }}
-                  >
-                    <Plus className='h-4 w-4' />
-                  </Button>
-                </div>
-              )}
+                ))}
             </div>
           )}
-
-          {/* New Message Button */}
-          <div className='px-2 mt-2'>
-            <Button
-              variant='ghost'
-              className='w-full justify-between px-2 py-1 h-8 text-sm rounded-md text-zinc-400 hover:text-white hover:bg-zinc-700'
-              onClick={() => {
-                const trigger = document.querySelector(
-                  '.new-message-trigger'
-                ) as HTMLButtonElement;
-                if (trigger) trigger.click();
-              }}
-            >
-              <div className='flex items-center'>
-                <AtSign className='h-4 w-4 mr-2' />
-                <span>Nuevo mensaje</span>
-              </div>
-              <Plus className='h-4 w-4' />
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -468,7 +394,8 @@ export function ChatList() {
       {/* Hidden trigger for user select dialog */}
       <div className='hidden'>
         <UserSelectDialog
-          onSelectUser={handleUserSelect}
+          onCreateChat={handleCreateChat}
+          onSelectUser={() => {}}
           trigger={<button className='new-message-trigger' />}
         />
       </div>

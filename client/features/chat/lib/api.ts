@@ -39,6 +39,7 @@ export interface Chat {
   id: string;
   name: string | null;
   isGroup: boolean;
+  type: 'INDIVIDUAL' | 'GROUP';
   createdAt: string;
   members: ChatMember[];
   lastMessage?: Message;
@@ -278,6 +279,53 @@ export const chatApi = {
       return data.data;
     } catch (error) {
       console.error('Error al crear chat:', error);
+      throw error;
+    }
+  },
+
+  // Añadir un miembro a un chat grupal existente
+  addMemberToChat: async (chatId: string, userId: string): Promise<Chat> => {
+    try {
+      console.log(
+        `API addMemberToChat called with chatId: ${chatId}, userId: ${userId}`
+      );
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/chats/${chatId}/members`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ userId })
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: 'Unknown error' }));
+        console.error('Error adding member to chat:', errorData);
+        throw new Error(
+          `Error: ${response.status} - ${errorData.message || 'Unknown error'}`
+        );
+      }
+
+      const data = await response.json();
+
+      // Invalidar caché del chat
+      delete apiCache[`chat_${chatId}`];
+
+      // Invalidar caché de chats del usuario
+      Object.keys(apiCache).forEach(key => {
+        if (key.startsWith('chats_')) {
+          delete apiCache[key];
+        }
+      });
+
+      return data.data;
+    } catch (error) {
+      console.error('Error al añadir miembro al chat:', error);
       throw error;
     }
   }

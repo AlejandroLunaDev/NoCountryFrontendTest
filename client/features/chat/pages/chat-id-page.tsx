@@ -281,8 +281,9 @@ export function ChatIdPage() {
           <ChatWindow
             chatId={chatId}
             chatName={chatName}
-            isGroup={chat?.isGroup || false}
+            isGroup={chat?.type === 'GROUP'}
             isLoading={isLoading || isPending || isRefetching}
+            members={chat?.members || []}
           />
         )}
       </div>

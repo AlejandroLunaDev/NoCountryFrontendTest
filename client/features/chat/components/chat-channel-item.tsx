@@ -1,6 +1,6 @@
 'use client';
 
-import { Hash, X, AtSign } from 'lucide-react';
+import { Hash, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import socket from '@/lib/socket';
@@ -16,6 +16,7 @@ import { usePresence } from '../providers/presence-provider';
 import type { ChatMember } from '../lib/api';
 import { useRouter } from 'next/navigation';
 import { useMemo } from 'react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 // ChatMember extendido que incluye user opcional
 interface ExtendedChatMember extends Omit<ChatMember, 'name'> {
@@ -58,7 +59,12 @@ export function ChatChannelItem({
     let otherId = null;
     let displayName = name;
 
-    if (!isGroup && Array.isArray(members) && members.length > 0 && user) {
+    // Si es un grupo, siempre usar el nombre original
+    if (isGroup) {
+      return { otherMemberId: null, peerName: name };
+    }
+
+    if (Array.isArray(members) && members.length > 0 && user) {
       const otherMembers = members.filter(member => member.userId !== user.id);
 
       if (otherMembers.length > 0) {
@@ -144,14 +150,17 @@ export function ChatChannelItem({
     >
       {!isGroup ? (
         <div className='relative'>
+          <Avatar className='h-6 w-6'>
+            <AvatarFallback className='bg-zinc-700 text-zinc-300 text-xs'>
+              {peerName.substring(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
           <div
             className={cn(
-              'w-3.5 h-3.5 rounded-full absolute -top-1 -left-1 border-2 border-zinc-800',
-              isOnline ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'
+              'w-2.5 h-2.5 rounded-full absolute -bottom-0.5 -right-0.5 border-2 border-zinc-800',
+              isOnline ? 'bg-green-500' : 'bg-zinc-500'
             )}
           />
-
-          <AtSign className='h-4 w-4 text-zinc-500 group-hover:text-zinc-300 ml-1.5' />
         </div>
       ) : (
         <Hash className='h-4 w-4 text-zinc-500 group-hover:text-zinc-300' />
@@ -161,9 +170,9 @@ export function ChatChannelItem({
           'text-sm font-medium text-zinc-400 group-hover:text-zinc-300 transition flex-1 truncate',
           isActive && 'text-white font-semibold'
         )}
-        title={peerName}
+        title={isGroup ? name : peerName}
       >
-        {peerName}
+        {isGroup ? name : peerName}
       </span>
 
       {unseenCount > 0 && (

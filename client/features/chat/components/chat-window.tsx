@@ -4,20 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMessages } from '../hooks/use-chat.ts';
 import { ChatInput } from './chat-input';
 import { ChatMessage } from './chat-message';
-import {
-  ArrowLeft,
-  Hash,
-  Bell,
-  Pin,
-  Users,
-  AtSign,
-  HelpCircle
-} from 'lucide-react';
+import { ArrowLeft, Hash, Bell, Pin, Users, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useSendMessage } from '../hooks/use-chat.ts';
 import { useAuth } from '@/features/auth/providers/auth-provider';
-import type { Message } from '../lib/api';
+import type { Message, ChatMember } from '../lib/api';
+import { ChatMembersSidebar } from './chat-members-sidebar';
 
 interface ChatWindowProps {
   chatId: string;
@@ -25,6 +18,7 @@ interface ChatWindowProps {
   isGroup?: boolean;
   onBack?: () => void;
   isLoading?: boolean;
+  members?: ChatMember[];
 }
 
 interface ProcessedMessage extends Message {
@@ -40,7 +34,8 @@ export function ChatWindow({
   chatName = 'Chat',
   isGroup = false,
   onBack,
-  isLoading = false
+  isLoading = false,
+  members = []
 }: ChatWindowProps) {
   const {
     data: messages = [],
@@ -283,142 +278,188 @@ export function ChatWindow({
     sendTyping(chatId);
   };
 
-  return (
-    <div className='flex flex-col h-full bg-zinc-800 overflow-hidden relative'>
-      {/* Chat header */}
-      <div className='h-14 min-h-[56px] border-b border-zinc-700 flex items-center px-4 gap-1.5'>
-        <div className='md:hidden'>
-          <Button
-            size='icon'
-            variant='ghost'
-            onClick={handleBack}
-            className='h-8 w-8'
-          >
-            <ArrowLeft className='h-4 w-4' />
-          </Button>
-        </div>
-        {isGroup ? (
-          <Hash className='h-5 w-5 text-zinc-500 mr-1' />
-        ) : (
-          <AtSign className='h-5 w-5 text-zinc-500 mr-1' />
-        )}
+  // Extraer miembros únicos de los mensajes y combinar con los miembros pasados como prop
+  const chatMembers = useMemo(() => {
+    // Usamos un Map para combinar ambas fuentes de miembros y evitar duplicados
+    const membersMap = new Map<string, ChatMember>();
 
-        <div className='flex flex-col'>
-          <h2 className='text-md font-semibold text-white'>{chatName}</h2>
-          {/* Mostrar un indicador de carga sutil en vez de spinner completo */}
-          {isLoadingMessages ? (
-            <span className='text-xs text-zinc-400'>Cargando mensajes...</span>
+    // Primero agregamos los miembros que vienen como prop (si hay)
+    if (members && members.length > 0) {
+      members.forEach(member => {
+        if (member && member.userId) {
+          membersMap.set(member.userId, member);
+        }
+      });
+    }
+
+    // Luego agregamos cualquier miembro adicional de los mensajes (para casos donde los miembros prop estén vacíos)
+    if (
+      isGroup &&
+      localMessages &&
+      Array.isArray(localMessages) &&
+      localMessages.length > 0
+    ) {
+      localMessages.forEach(message => {
+        if (!message || !message.senderId) return;
+
+        // Solo agregamos al usuario si no existe ya en el mapa
+        if (!membersMap.has(message.senderId)) {
+          membersMap.set(message.senderId, {
+            id: message.senderId,
+            userId: message.senderId,
+            chatId: chatId,
+            name: message.sender?.name || 'Usuario'
+          });
+        }
+      });
+    }
+
+    return Array.from(membersMap.values());
+  }, [isGroup, localMessages, chatId, members]);
+
+  return (
+    <div className='flex h-full overflow-hidden'>
+      <div className='flex flex-col flex-1 bg-zinc-800 overflow-hidden relative'>
+        {/* Chat header */}
+        <div className='h-14 min-h-[56px] border-b border-zinc-700 flex items-center px-4 gap-1.5'>
+          <div className='md:hidden'>
+            <Button
+              size='icon'
+              variant='ghost'
+              onClick={handleBack}
+              className='h-8 w-8'
+            >
+              <ArrowLeft className='h-4 w-4' />
+            </Button>
+          </div>
+          {isGroup ? (
+            <Hash className='h-5 w-5 text-zinc-500 mr-1' />
           ) : (
-            <span className='text-xs text-zinc-400'>
-              {isGroup ? 'Canal de grupo' : 'Mensaje directo'}
-            </span>
+            <Users className='h-5 w-5 text-zinc-500 mr-1' />
+          )}
+
+          <div className='flex flex-col'>
+            <h2 className='text-md font-semibold text-white'>{chatName}</h2>
+            {/* Mostrar un indicador de carga sutil en vez de spinner completo */}
+            {isLoadingMessages ? (
+              <span className='text-xs text-zinc-400'>
+                Cargando mensajes...
+              </span>
+            ) : (
+              <span className='text-xs text-zinc-400'>
+                {isGroup ? 'Chat grupal' : 'Mensaje directo'}
+              </span>
+            )}
+          </div>
+
+          <div className='ml-auto flex items-center gap-2'>
+            <Button variant='ghost' size='icon' className='h-8 w-8'>
+              <Bell className='h-4 w-4 text-zinc-500' />
+            </Button>
+            <Button variant='ghost' size='icon' className='h-8 w-8'>
+              <Pin className='h-4 w-4 text-zinc-500' />
+            </Button>
+            <Button variant='ghost' size='icon' className='h-8 w-8'>
+              <Users className='h-4 w-4 text-zinc-500' />
+            </Button>
+            <Button variant='ghost' size='icon' className='h-8 w-8'>
+              <HelpCircle className='h-4 w-4 text-zinc-500' />
+            </Button>
+          </div>
+        </div>
+
+        {/* Chat messages area */}
+        <div className='flex-1 overflow-y-auto p-4 space-y-4'>
+          {isErrorVisible && (
+            <div className='p-3 bg-red-500/10 border border-red-500/20 rounded-md mb-4'>
+              <p className='text-sm text-red-300'>
+                Error al cargar mensajes. Intenta recargar la página.
+              </p>
+            </div>
+          )}
+
+          {/* Mostrar mensaje cuando no hay mensajes */}
+          {!isLoadingMessages && processedMessages.length === 0 && (
+            <div className='flex flex-col items-center justify-center h-full'>
+              <div className='rounded-full bg-zinc-700 p-3 mb-4'>
+                {isGroup ? (
+                  <Hash className='h-6 w-6 text-zinc-300' />
+                ) : (
+                  <Users className='h-6 w-6 text-zinc-300' />
+                )}
+              </div>
+              <h3 className='text-lg font-medium text-zinc-300 mb-1'>
+                {isGroup
+                  ? 'Bienvenido al inicio del chat grupal'
+                  : 'Bienvenido a tu nuevo chat'}
+              </h3>
+              <p className='text-sm text-zinc-400 text-center max-w-md'>
+                {isGroup
+                  ? 'Este es el comienzo del chat grupal. Sé respetuoso con los demás miembros.'
+                  : 'Este es el comienzo de tu conversación. Envía un mensaje para comenzar.'}
+              </p>
+            </div>
+          )}
+
+          {/* Si está cargando y no hay mensajes, mostrar skeletons */}
+          {isLoadingMessages && processedMessages.length === 0 && (
+            <div className='space-y-4'>
+              {Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className='flex items-start gap-2 animate-pulse'>
+                  <div className='h-8 w-8 rounded-full bg-zinc-700' />
+                  <div className='space-y-2 flex-1'>
+                    <div className='h-4 w-24 bg-zinc-700 rounded' />
+                    <div className='h-10 bg-zinc-700 rounded w-3/4' />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Mostrar mensajes */}
+          {processedMessages.map((message, index) => (
+            <ChatMessage
+              key={message.id}
+              id={message.id}
+              content={message.content}
+              sender={message.sender?.name || 'Usuario'}
+              isCurrentUser={message.senderId === user?.id}
+              timestamp={message.createdAt}
+              showSender={message.showSender}
+              isFirstInGroup={message.isFirstInGroup}
+              isLastInGroup={message.isLastInGroup}
+              isPending={message.isPending}
+              replyTo={message.replyToId}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+
+          {/* Typing indicator */}
+          {typingUsers.length > 0 && (
+            <div className='text-xs text-zinc-400 italic'>
+              {typingUsers.join(', ')}{' '}
+              {typingUsers.length === 1 ? 'está' : 'están'} escribiendo...
+            </div>
           )}
         </div>
 
-        <div className='ml-auto flex items-center gap-2'>
-          <Button variant='ghost' size='icon' className='h-8 w-8'>
-            <Bell className='h-4 w-4 text-zinc-500' />
-          </Button>
-          <Button variant='ghost' size='icon' className='h-8 w-8'>
-            <Pin className='h-4 w-4 text-zinc-500' />
-          </Button>
-          <Button variant='ghost' size='icon' className='h-8 w-8'>
-            <Users className='h-4 w-4 text-zinc-500' />
-          </Button>
-          <Button variant='ghost' size='icon' className='h-8 w-8'>
-            <HelpCircle className='h-4 w-4 text-zinc-500' />
-          </Button>
+        {/* Chat input */}
+        <div className='p-4 border-t border-zinc-700'>
+          <ChatInput
+            onSend={handleSendMessage}
+            onTyping={handleTyping}
+            isDisabled={isLoadingMessages}
+            placeholder={
+              isLoadingMessages
+                ? 'Cargando chat...'
+                : `Mensaje a ${isGroup ? chatName : chatName.split(' ')[0]}`
+            }
+          />
         </div>
       </div>
 
-      {/* Chat messages area */}
-      <div className='flex-1 overflow-y-auto p-4 space-y-4'>
-        {isErrorVisible && (
-          <div className='p-3 bg-red-500/10 border border-red-500/20 rounded-md mb-4'>
-            <p className='text-sm text-red-300'>
-              Error al cargar mensajes. Intenta recargar la página.
-            </p>
-          </div>
-        )}
-
-        {/* Mostrar mensaje cuando no hay mensajes */}
-        {!isLoadingMessages && processedMessages.length === 0 && (
-          <div className='flex flex-col items-center justify-center h-full'>
-            <div className='rounded-full bg-zinc-700 p-3 mb-4'>
-              {isGroup ? (
-                <Hash className='h-6 w-6 text-zinc-300' />
-              ) : (
-                <AtSign className='h-6 w-6 text-zinc-300' />
-              )}
-            </div>
-            <h3 className='text-lg font-medium text-zinc-300 mb-1'>
-              {isGroup
-                ? 'Bienvenido al inicio del canal'
-                : 'Bienvenido a tu nuevo chat'}
-            </h3>
-            <p className='text-sm text-zinc-400 text-center max-w-md'>
-              {isGroup
-                ? 'Este es el comienzo del canal. Sé respetuoso con los demás miembros.'
-                : 'Este es el comienzo de tu conversación. Envía un mensaje para comenzar.'}
-            </p>
-          </div>
-        )}
-
-        {/* Si está cargando y no hay mensajes, mostrar skeletons */}
-        {isLoadingMessages && processedMessages.length === 0 && (
-          <div className='space-y-4'>
-            {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className='flex items-start gap-2 animate-pulse'>
-                <div className='h-8 w-8 rounded-full bg-zinc-700' />
-                <div className='space-y-2 flex-1'>
-                  <div className='h-4 w-24 bg-zinc-700 rounded' />
-                  <div className='h-10 bg-zinc-700 rounded w-3/4' />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Mostrar mensajes */}
-        {processedMessages.map((message, index) => (
-          <ChatMessage
-            key={message.id}
-            id={message.id}
-            content={message.content}
-            sender={message.sender?.name || 'Usuario'}
-            isCurrentUser={message.senderId === user?.id}
-            timestamp={message.createdAt}
-            showSender={message.showSender}
-            isFirstInGroup={message.isFirstInGroup}
-            isLastInGroup={message.isLastInGroup}
-            isPending={message.isPending}
-            replyTo={message.replyToId}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-
-        {/* Typing indicator */}
-        {typingUsers.length > 0 && (
-          <div className='text-xs text-zinc-400 italic'>
-            {typingUsers.join(', ')}{' '}
-            {typingUsers.length === 1 ? 'está' : 'están'} escribiendo...
-          </div>
-        )}
-      </div>
-
-      {/* Chat input */}
-      <div className='p-4 border-t border-zinc-700'>
-        <ChatInput
-          onSend={handleSendMessage}
-          onTyping={handleTyping}
-          isDisabled={isLoadingMessages}
-          placeholder={
-            isLoadingMessages
-              ? 'Cargando chat...'
-              : `Mensaje a ${isGroup ? chatName : chatName.split(' ')[0]}`
-          }
-        />
-      </div>
+      {/* Lista de miembros (solo visible en chats grupales) */}
+      <ChatMembersSidebar members={chatMembers} isVisible={isGroup} />
     </div>
   );
 }

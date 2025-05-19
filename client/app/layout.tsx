@@ -36,12 +36,8 @@ export default function RootLayout({
           <div>
             <div className='min-h-screen'>
               <AuthProvider>
-                <SocketProvider>
-                  <PresenceProvider>
                     <QueryProvider>
                       <Toaster position='top-center' />
-                      <ChatEventHandler />
-                      <NotificationPermission />
                       <div className='relative flex min-h-screen flex-col'>
                         <div className='fixed bottom-4 right-4 z-50'>
                           <CustomToaster />
@@ -49,8 +45,6 @@ export default function RootLayout({
                         {children}
                       </div>
                     </QueryProvider>
-                  </PresenceProvider>
-                </SocketProvider>
               </AuthProvider>
             </div>
           </div>

@@ -42,7 +42,7 @@ export function ChatMessage({
   readBy = []
 }: ChatMessageProps) {
   const { user } = useAuth();
-  
+
   // Formatea la hora del mensaje
   const formattedTime = format(new Date(timestamp), 'HH:mm', {
     locale: es

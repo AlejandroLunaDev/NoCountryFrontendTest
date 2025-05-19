@@ -862,3 +862,49 @@ export const useMarkChatAsRead = () => {
     }
   });
 };
+
+// Hook para agregar un miembro a un chat grupal
+export function useAddMemberToChat() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { status, socket } = useSocket();
+
+  return useMutation<Chat, Error, { chatId: string; userId: string }>({
+    mutationFn: async ({ chatId, userId }) => {
+      if (!user?.id) throw new Error('User not authenticated');
+
+      console.log(`Adding user ${userId} to chat ${chatId}`);
+      return chatApi.addMemberToChat(chatId, userId);
+    },
+    onSuccess: updatedChat => {
+      console.log('Member added successfully to chat:', updatedChat);
+
+      // Update the cache with the updated chat
+      queryClient.setQueryData(['chat', updatedChat.id], updatedChat);
+
+      // Update chat list cache
+      queryClient.setQueryData<Chat[]>(['chats', user?.id], (oldData = []) => {
+        return oldData.map(chat =>
+          chat.id === updatedChat.id ? updatedChat : chat
+        );
+      });
+
+      // If socket connected, join the updated chat
+      if (status === 'connected' && socket) {
+        socket.emit('join_chat', { chatId: updatedChat.id, userId: user.id });
+      }
+
+      // Show success toast
+      toast.success('Miembro añadido al grupo', {
+        description: 'El usuario ha sido añadido al chat grupal'
+      });
+    },
+    onError: error => {
+      console.error('Error adding member to chat:', error);
+      toast.error('Error al añadir miembro', {
+        description:
+          'No se pudo añadir el usuario al grupo. Intenta nuevamente.'
+      });
+    }
+  });
+}
