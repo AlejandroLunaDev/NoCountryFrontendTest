@@ -287,11 +287,10 @@ export function useMessages(chatId: string) {
       }
     },
     staleTime: 10000, // 10 segundos
-    cacheTime: 3600000, // Cache for 1 hour
+    gcTime: 3600000, // Cache for 1 hour
     refetchOnMount: false, // Don't refetch when component mounts
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
     retry: false,
-    keepPreviousData: true, // Mantener datos anteriores mientras carga nuevos
     placeholderData: [], // Mostrar array vacío hasta tener datos
     enabled: !!chatId
   });
