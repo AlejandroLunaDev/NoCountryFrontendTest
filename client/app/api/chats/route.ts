@@ -16,7 +16,7 @@ interface ChatMemberFromSupabase {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Verificar si el usuario está autenticado
     const {

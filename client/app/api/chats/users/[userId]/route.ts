@@ -34,7 +34,7 @@ interface ChatFromSupabase {
 
 export async function GET(request: Request) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Get userId from URL path
     const url = new URL(request.url);

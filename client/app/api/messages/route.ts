@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 // Obtener mensajes
 export async function GET(request: Request) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Obtener la URL y parámetros
     const url = new URL(request.url);
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
 // Enviar un mensaje
 export async function POST(request: Request) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Verificar si el usuario está autenticado
     const {
