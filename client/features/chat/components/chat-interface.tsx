@@ -1,4 +1,4 @@
- e'use client';
+ 'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../providers/chat-provider';
@@ -9,6 +9,8 @@ import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
+import { useMarkChatAsRead } from '../hooks/use-chat';
+import { usePresence } from '../providers/presence-provider';
 
 interface MessageItemProps {
   message: Message;
@@ -64,6 +66,47 @@ interface ChatListProps {
 }
 
 function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
+  const { user } = useAuth();
+  const { isUserOnline } = usePresence();
+
+  // Función para obtener el nombre a mostrar para un chat individual
+  const getChatDisplayName = (chat: Chat) => {
+    // Para chats grupales, mostrar el nombre del grupo
+    if (chat.type === 'GROUP') {
+      return chat.name || 'Grupo';
+    }
+    
+    // Para chats individuales, mostrar el nombre del otro usuario
+    if (chat.members && Array.isArray(chat.members)) {
+      // Log para depuración
+      console.log('Interface - Chat members:', chat.members);
+      
+      // Buscar el miembro que no es el usuario actual
+      const otherMember = chat.members.find(m => m.userId !== user?.id);
+      console.log('Interface - Current user ID:', user?.id);
+      console.log('Interface - Other member found:', otherMember);
+      
+      // Usar nombre del objeto user anidado, email, o un fallback
+      if (otherMember) {
+        // El nombre está en otherMember.user.name
+        if (otherMember.user && otherMember.user.name) 
+          return otherMember.user.name;
+        
+        // Fallback a email si existe
+        if (otherMember.user && otherMember.user.email) 
+          return otherMember.user.email.split('@')[0];
+          
+        // Fallback si no hay user o name
+        if (otherMember.name) 
+          return otherMember.name;
+      }
+      
+      return 'Usuario';
+    }
+    
+    return chat.name || 'Chat';
+  };
+
   return (
     <div className='w-60 bg-zinc-800 text-white'>
       <div className='p-4 border-b border-zinc-700'>
@@ -95,26 +138,30 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
         <div className='mt-1 space-y-1'>
           {chats
             .filter(c => c.type === 'PRIVATE')
-            .map(chat => (
-              <div
-                key={chat.id}
-                className={cn(
-                  'px-2 py-1 text-zinc-400 hover:bg-zinc-700 cursor-pointer rounded flex items-center',
-                  selectedChatId === chat.id && 'bg-zinc-700 text-white'
-                )}
-                onClick={() => onSelectChat(chat.id)}
-              >
+            .map(chat => {
+              // Detectar si algún miembro está online
+              const hasOnlineMember = chat.members && 
+                chat.members.some(m => m.userId !== user?.id && isUserOnline(m.userId));
+              
+              return (
                 <div
+                  key={chat.id}
                   className={cn(
-                    'w-2 h-2 rounded-full mr-2',
-                    chat.members.some(m => m.status === 'ONLINE')
-                      ? 'bg-green-500'
-                      : 'bg-zinc-500'
+                    'px-2 py-1 text-zinc-400 hover:bg-zinc-700 cursor-pointer rounded flex items-center',
+                    selectedChatId === chat.id && 'bg-zinc-700 text-white'
                   )}
-                />
-                {chat.name}
-              </div>
-            ))}
+                  onClick={() => onSelectChat(chat.id)}
+                >
+                  <div
+                    className={cn(
+                      'w-2 h-2 rounded-full mr-2',
+                      hasOnlineMember ? 'bg-green-500' : 'bg-zinc-500'
+                    )}
+                  />
+                  {getChatDisplayName(chat)}
+                </div>
+              );
+            })}
         </div>
       </div>
     </div>
@@ -129,10 +176,10 @@ function MemberSidebar({ members }: MemberSidebarProps) {
   return (
     <div className='w-60 bg-zinc-800 border-l border-zinc-700 p-4'>
       <h3 className='text-xs font-semibold text-zinc-400 mb-2'>
-        MIEMBROS - {members.length}
+        MIEMBROS - {members && members.length ? members.length : 0}
       </h3>
       <div className='space-y-2'>
-        {members.map(member => (
+        {members && members.map(member => (
           <div
             key={member.id}
             className='flex items-center text-zinc-300 hover:bg-zinc-700 rounded p-1 cursor-pointer'
@@ -166,12 +213,52 @@ function MemberSidebar({ members }: MemberSidebarProps) {
   );
 }
 
-export function ChatInterface() {
+export function ChatInterface({ chatId }: { chatId: string }) {
   const { chats, currentChat, selectChat, sendMessage, isLoading } = useChat();
   const { user } = useAuth();
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const markChatAsRead = useMarkChatAsRead();
+  const { updatePresence } = usePresence();
+
+  // Función para obtener el nombre a mostrar para un chat individual
+  const getChatDisplayName = (chat: Chat) => {
+    // Para chats grupales, mostrar el nombre del grupo
+    if (chat.type === 'GROUP') {
+      return chat.name || 'Grupo';
+    }
+    
+    // Para chats individuales, mostrar el nombre del otro usuario
+    if (chat.members && Array.isArray(chat.members)) {
+      // Log para depuración
+      console.log('Interface - Chat members:', chat.members);
+      
+      // Buscar el miembro que no es el usuario actual
+      const otherMember = chat.members.find(m => m.userId !== user?.id);
+      console.log('Interface - Current user ID:', user?.id);
+      console.log('Interface - Other member found:', otherMember);
+      
+      // Usar nombre del objeto user anidado, email, o un fallback
+      if (otherMember) {
+        // El nombre está en otherMember.user.name
+        if (otherMember.user && otherMember.user.name) 
+          return otherMember.user.name;
+        
+        // Fallback a email si existe
+        if (otherMember.user && otherMember.user.email) 
+          return otherMember.user.email.split('@')[0];
+          
+        // Fallback si no hay user o name
+        if (otherMember.name) 
+          return otherMember.name;
+      }
+      
+      return 'Usuario';
+    }
+    
+    return chat.name || 'Chat';
+  };
 
   // Scroll automático cuando llegan mensajes nuevos
   useEffect(() => {
@@ -179,6 +266,14 @@ export function ChatInterface() {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [currentChat?.messages]);
+
+  // Agregar un useEffect para marcar el chat como leído cuando se carga
+  useEffect(() => {
+    if (chatId && user?.id) {
+      // Marcar el chat como leído cuando el usuario entra
+      markChatAsRead.mutate({ chatId, userId: user.id });
+    }
+  }, [chatId, user?.id]);
 
   const handleSelectChat = (chatId: string) => {
     selectChat(chatId);
@@ -188,6 +283,9 @@ export function ChatInterface() {
     e.preventDefault();
     if (!messageInput.trim() || !currentChat) return;
 
+    // Actualizar presencia al enviar un mensaje
+    updatePresence();
+    
     setIsSending(true);
     await sendMessage(messageInput.trim());
     setMessageInput('');
@@ -224,7 +322,7 @@ export function ChatInterface() {
                 <span className='font-semibold text-lg'>
                   {currentChat.type === 'GROUP'
                     ? `# ${currentChat.name}`
-                    : currentChat.name}
+                    : getChatDisplayName(currentChat)}
                 </span>
                 <span className='ml-2 text-zinc-500 text-sm'>
                   {currentChat.type === 'GROUP'
@@ -263,7 +361,7 @@ export function ChatInterface() {
                   placeholder={`Enviar un mensaje a ${
                     currentChat.type === 'GROUP'
                       ? `#${currentChat.name}`
-                      : currentChat.name
+                      : getChatDisplayName(currentChat)
                   }`}
                   className='bg-transparent flex-1 outline-none text-sm'
                   value={messageInput}

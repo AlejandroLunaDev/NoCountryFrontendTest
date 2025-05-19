@@ -43,12 +43,24 @@ if (typeof window !== 'undefined') {
 
   socket.on('message_received', message => {
     console.log('[IMPORTANT] Message received:', message);
-    // If message is for a chat that was deleted, emit an event to trigger rechecking chats
-    socket.emit('check_chat_exists', message.chatId);
+
+    // Siempre emitir el evento restore_deleted_chat para asegurar que el chat esté visible
+    // para el usuario actual, independientemente de si fue eliminado previamente
+    socket.emit('restore_deleted_chat', message.chatId);
+
+    // Unirse al canal del chat para recibir futuros mensajes
+    socket.emit('join_chat', {
+      chatId: message.chatId,
+      userId: socket.auth?.userId
+    });
   });
 
   socket.on('chat_created', chat => {
     console.log('[IMPORTANT] Chat created/restored:', chat);
+  });
+
+  socket.on('user_presence_changed', data => {
+    console.log('[IMPORTANT] User presence changed:', data);
   });
 
   socket.on('connect', () => {
@@ -126,15 +138,30 @@ if (typeof window !== 'undefined') {
 }
 
 // Función para conectar el socket con autenticación
-export const connectSocket = (token: string) => {
+export const connectSocket = (token: string, userId?: string) => {
   // Si ya está conectado, no hacer nada
   if (socket.connected) return;
 
-  // Configurar el token de autenticación
-  socket.auth = { token };
+  // Configurar el token de autenticación y el userId
+  socket.auth = { token, userId };
 
   // Conectar al servidor
   socket.connect();
+
+  // Al conectarse exitosamente, notificar que estamos en línea
+  socket.on('connect', () => {
+    // El token contiene información del usuario, podemos extraer el userId
+    const userId = (socket.auth as any)?.userId;
+
+    // Emitir evento de presencia inmediatamente después de conectar
+    if (userId) {
+      console.log('[IMPORTANT] Emitting presence update for user:', userId);
+      socket.emit('update_presence', {
+        userId,
+        isOnline: true
+      });
+    }
+  });
 };
 
 // Función para desconectar el socket
@@ -147,7 +174,7 @@ export const disconnectSocket = () => {
 // Unirse a un chat
 export const joinChat = (chatId: string) => {
   if (socket.connected) {
-    socket.emit('join_chat', chatId);
+    socket.emit('join_chat', { chatId, userId: socket.auth?.userId });
   }
 };
 

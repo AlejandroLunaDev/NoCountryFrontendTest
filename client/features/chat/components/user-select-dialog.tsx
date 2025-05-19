@@ -68,6 +68,11 @@ export function UserSelectDialog({
     : [];
 
   const handleSelectUser = (userId: string, userName: string) => {
+    console.log('Selected user:', { userId, userName });
+    console.log(
+      'Full user object:',
+      users?.find(u => u.id === userId)
+    );
     onSelectUser(userId, userName);
     setOpen(false);
   };

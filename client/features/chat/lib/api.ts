@@ -42,6 +42,7 @@ export interface Chat {
   createdAt: string;
   members: ChatMember[];
   lastMessage?: Message;
+  unreadCount?: number;
 }
 
 // API para usuarios

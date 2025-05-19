@@ -11,6 +11,8 @@ import socket, {
 import { chatApi, messageApi, userApi } from '../lib/api';
 import type { User, Chat, Message } from '../lib/api';
 import { debounce } from 'lodash';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 // Hook para obtener usuarios
 export function useUsers() {
@@ -181,6 +183,22 @@ export function useChats() {
       socket.off('notification', handleNotification);
     };
   }, [queryClient, status, user?.id]);
+
+  // Si se restauró un chat, asegurarse de que el usuario se una a él
+  useEffect(() => {
+    if (
+      status === 'connected' &&
+      socket &&
+      user?.id &&
+      chatsQuery.data?.length
+    ) {
+      // Unirse a todos los chats existentes para asegurar que recibimos mensajes
+      chatsQuery.data.forEach(chat => {
+        console.log('Joining chat channel:', chat.id);
+        socket.emit('join_chat', { chatId: chat.id, userId: user.id });
+      });
+    }
+  }, [status, socket, user?.id, chatsQuery.data]);
 
   return chatsQuery;
 }
@@ -661,7 +679,7 @@ export function useCreateChat() {
       // If we're connected to socket, emit an event to join this chat
       if (status === 'connected' && socket) {
         console.log('Joining new chat via socket:', newChat.id);
-        socket.emit('join_chat', newChat.id);
+        socket.emit('join_chat', { chatId: newChat.id, userId: user.id });
       }
     },
     onError: error => {
@@ -670,11 +688,12 @@ export function useCreateChat() {
   });
 }
 
-// Handle chat restoration after deletion
+// Hook para manejar la restauración de chats eliminados cuando llegan nuevos mensajes
 export function useHandleDeletedChats() {
   const { socket, status } = useSocket();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   useEffect(() => {
     if (!socket || !user?.id || status !== 'connected') return;
@@ -691,8 +710,22 @@ export function useHandleDeletedChats() {
       if (!currentChats.some(chat => chat.id === message.chatId)) {
         console.log('Message for deleted chat detected, will refetch chats');
 
-        // Force a refetch of chats
+        // Explicitly tell the server to restore this chat for the current user
+        socket.emit('restore_deleted_chat', message.chatId);
+
+        // Force a refetch of chats immediately
         queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
+
+        // También actualizar la caché con el nuevo mensaje
+        queryClient.setQueryData(
+          ['messages', message.chatId],
+          (oldData: Message[] = []) => {
+            if (!oldData.some(m => m.id === message.id)) {
+              return [...oldData, message];
+            }
+            return oldData;
+          }
+        );
 
         // Also explicitly join this chat
         socket.emit('join_chat', message.chatId);
@@ -702,16 +735,52 @@ export function useHandleDeletedChats() {
     socket.on('message_received', handleNewMessage);
 
     // Also listen for explicit chat_restored events
-    socket.on('chat_restored', (chatId: string) => {
-      console.log('Chat restored event received for:', chatId);
-      queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
-    });
+    socket.on(
+      'chat_restored',
+      (data: {
+        chatId: string;
+        restoredBecause?: string;
+        messageFrom?: {
+          id: string;
+          name: string;
+        };
+        messagePreview?: string;
+      }) => {
+        const chatId = typeof data === 'string' ? data : data.chatId;
+        console.log('Chat restored event received for:', chatId, data);
+
+        // Recargar la lista de chats
+        queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
+
+        // Notificación mejorada con la información del mensaje
+        if (typeof data !== 'string' && data.messageFrom) {
+          toast.info(`Nuevo mensaje de ${data.messageFrom.name}`, {
+            description:
+              data.messagePreview ||
+              'Has recibido un nuevo mensaje en un chat que habías eliminado',
+            action: {
+              label: 'Ver',
+              onClick: () => router.push(`/chat/${chatId}`)
+            }
+          });
+        } else {
+          // Notificación genérica si no hay información del mensaje
+          toast.info('Chat restaurado', {
+            description: 'Un chat eliminado ha sido restaurado',
+            action: {
+              label: 'Ver',
+              onClick: () => router.push(`/chat/${chatId}`)
+            }
+          });
+        }
+      }
+    );
 
     return () => {
       socket.off('message_received', handleNewMessage);
       socket.off('chat_restored');
     };
-  }, [socket, status, user?.id, queryClient]);
+  }, [socket, status, user?.id, queryClient, router]);
 
   return null;
 }
@@ -722,3 +791,46 @@ interface AuthUser {
   email?: string;
   // otras propiedades que tenga tu AuthUser
 }
+
+// Función para marcar un chat como leído
+export const useMarkChatAsRead = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      chatId,
+      userId
+    }: {
+      chatId: string;
+      userId: string;
+    }) => {
+      try {
+        // Emitir evento al socket
+        socket.emit('mark_chat_as_read', { chatId, userId });
+
+        // Actualizar la caché localmente
+        queryClient.setQueryData(['chats'], (oldData: any) => {
+          if (!Array.isArray(oldData)) return oldData;
+
+          return oldData.map((chat: any) => {
+            if (chat.id === chatId) {
+              return {
+                ...chat,
+                unreadCount: 0
+              };
+            }
+            return chat;
+          });
+        });
+
+        return { success: true };
+      } catch (error) {
+        console.error('Error al marcar chat como leído:', error);
+        return { success: false, error };
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chats'] });
+    }
+  });
+};

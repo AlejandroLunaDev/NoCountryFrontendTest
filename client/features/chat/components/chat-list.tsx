@@ -1,19 +1,14 @@
 'use client';
 
-import { useChats, useCreateChat } from '../hooks/use-chat.ts';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Search,
   Plus,
-  Hash,
-  Users,
-  Settings,
   AtSign,
   ChevronDown,
   Headphones,
   Mic,
-  MessageSquare,
   LogOut,
   UserPlus
 } from 'lucide-react';
@@ -25,9 +20,19 @@ import { useAuth } from '@/features/auth/providers/auth-provider';
 import { UserSelectDialog } from './user-select-dialog';
 import { Avatar } from '@/components/ui/avatar';
 import { AvatarFallback } from '@/components/ui/avatar';
-import { Separator } from '@/components/ui/separator';
-import { cn } from '@/lib/utils';
 import { ChatChannelItem } from './chat-channel-item';
+import { useChats, useCreateChat } from '../hooks/use-chat.ts';
+
+// Definir interfaces para mejor tipado
+interface ChatMember {
+  userId: string;
+  name?: string;
+  user?: {
+    id?: string;
+    name?: string;
+    email?: string;
+  };
+}
 
 export function ChatList() {
   const { data: chats, isLoading, refetch } = useChats();
@@ -40,6 +45,7 @@ export function ChatList() {
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
   // Force refetch when the component is mounted or when the user changes
   useEffect(() => {
@@ -63,9 +69,13 @@ export function ChatList() {
 
   const handleChatSelect = (chatId: string) => {
     router.push(`/chat/${chatId}`);
+    setCurrentChatId(chatId);
   };
 
-  const handleUserSelect = async (selectedUserId: string, userName: string) => {
+  const handleUserSelect = async (
+    selectedUserId: string,
+    _userName: string
+  ) => {
     if (!user?.id) {
       toast.error('No se puede crear chat', {
         description: 'Necesitas iniciar sesión'
@@ -83,15 +93,17 @@ export function ChatList() {
     }
 
     try {
+      // Cuando se crea un chat individual (1 a 1), no es necesario establecer el nombre
+      // porque lo estableceremos dinámicamente en la función getChatDisplayName
       const newChat = await createChatMutation.mutateAsync({
         userIds: [selectedUserId],
-        name: userName,
+        name: '', // En lugar de null, usar string vacío
         type: 'INDIVIDUAL'
       });
 
       toast.success('Chat creado con éxito');
       router.push(`/chat/${newChat.id}`);
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al crear chat', {
         description: 'Inténtalo nuevamente'
       });
@@ -118,7 +130,7 @@ export function ChatList() {
       setGroupName('');
       setSelectedUsers([]);
       router.push(`/chat/${newChat.id}`);
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al crear grupo', {
         description: 'Inténtalo nuevamente'
       });
@@ -130,7 +142,7 @@ export function ChatList() {
       await signOut();
       router.push('/login');
       toast.success('Sesión cerrada');
-    } catch (error) {
+    } catch (_error) {
       toast.error('Error al cerrar sesión');
     }
   };
@@ -156,6 +168,38 @@ export function ChatList() {
   // Separate group and private chats
   const groupChats = filteredChats.filter(chat => chat.isGroup);
   const privateChats = filteredChats.filter(chat => !chat.isGroup);
+
+  const getChatDisplayName = (chat: any): string => {
+    // Para chats grupales, usar el nombre del grupo
+    if (chat.isGroup) {
+      return chat.name || 'Grupo';
+    }
+
+    // Para chats individuales (1 a 1), mostrar el nombre del otro usuario
+    if (chat.members) {
+      // Buscar el miembro que no es el usuario actual
+      const otherMember = chat.members.find((m: any) => m.userId !== user?.id);
+
+      // Usar nombre del objeto user anidado, email, o un fallback
+      if (otherMember) {
+        // El nombre está en otherMember.user.name
+        if (otherMember.user && otherMember.user.name)
+          return otherMember.user.name;
+
+        // Fallback a email si existe
+        if (otherMember.user && otherMember.user.email)
+          return otherMember.user.email.split('@')[0];
+
+        // Fallback si no hay user o name
+        if (otherMember.name) return otherMember.name;
+      }
+
+      return 'Usuario';
+    }
+
+    // Fallback por si no hay información suficiente
+    return chat.name || 'Chat';
+  };
 
   return (
     <div className='w-60 flex flex-col bg-zinc-900 overflow-hidden'>
@@ -282,10 +326,12 @@ export function ChatList() {
                   <ChatChannelItem
                     key={chat.id}
                     id={chat.id}
-                    name={chat.name || 'Canal'}
-                    isActive={false}
+                    name={chat.name || getChatDisplayName(chat)}
+                    isGroup={true}
+                    members={chat.members || []}
+                    isActive={currentChatId === chat.id}
                     onClick={() => handleChatSelect(chat.id)}
-                    unseenCount={0}
+                    unseenCount={chat.unreadCount || 0}
                   />
                 ))
               )}
@@ -310,27 +356,18 @@ export function ChatList() {
           {isPrivateChannelsOpen && (
             <div className='mt-1 space-y-0.5 px-2'>
               {privateChats.length > 0 ? (
-                privateChats.map(chat => {
-                  let displayName = chat.name || '';
-
-                  if (!chat.isGroup && !displayName) {
-                    const otherMember = chat.members.find(
-                      m => m.userId !== user?.id
-                    );
-                    displayName = otherMember?.name || 'Usuario';
-                  }
-
-                  return (
-                    <ChatChannelItem
-                      key={chat.id}
-                      id={chat.id}
-                      name={displayName}
-                      isActive={false}
-                      onClick={() => handleChatSelect(chat.id)}
-                      unseenCount={0}
-                    />
-                  );
-                })
+                privateChats.map(chat => (
+                  <ChatChannelItem
+                    key={chat.id}
+                    id={chat.id}
+                    name={chat.name || getChatDisplayName(chat)}
+                    isGroup={false}
+                    members={chat.members || []}
+                    isActive={currentChatId === chat.id}
+                    onClick={() => handleChatSelect(chat.id)}
+                    unseenCount={chat.unreadCount || 0}
+                  />
+                ))
               ) : (
                 <div className='flex items-center justify-between px-1 py-2'>
                   <span className='text-xs text-zinc-500'>

@@ -7,10 +7,67 @@ import { ChatList } from '@/features/chat/components/chat-list';
 import { useEffect } from 'react';
 import { Hash, PlusIcon, Settings } from 'lucide-react';
 import { NotificationCenter } from '@/features/notifications/components/notification-center';
+import { useQueryClient } from '@tanstack/react-query';
+import { useSocket } from '@/features/chat/providers/socket-provider';
+import socket from '@/lib/socket';
+import type { Message, Chat } from '@/features/chat/lib/api';
 
 export function ChatPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { status } = useSocket();
+
+  // Implementamos la funcionalidad de useHandleDeletedChats directamente
+  useEffect(() => {
+    if (!socket || !user?.id || status !== 'connected') return;
+
+    // When a new message is received, check if the chat exists
+    const handleNewMessage = (message: Message) => {
+      console.log('Checking if chat exists for message:', message);
+
+      // Get current chats
+      const currentChats =
+        queryClient.getQueryData<Chat[]>(['chats', user.id]) || [];
+
+      // If chat doesn't exist in our list, we need to fetch it
+      if (!currentChats.some(chat => chat.id === message.chatId)) {
+        console.log('Message for deleted chat detected, will refetch chats');
+
+        // Forzar una recarga de la lista de chats para que aparezca de nuevo el chat eliminado
+        queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
+
+        // También actualizar la caché con el nuevo mensaje
+        queryClient.setQueryData(
+          ['messages', message.chatId],
+          (oldData: Message[] = []) => {
+            if (!oldData.some(m => m.id === message.id)) {
+              return [...oldData, message];
+            }
+            return oldData;
+          }
+        );
+
+        // Unirse explícitamente a este chat
+        socket.emit('join_chat', message.chatId);
+      }
+    };
+
+    socket.on('message_received', handleNewMessage);
+
+    // Also listen for explicit chat_restored events
+    socket.on('chat_restored', (restoredChatId: string) => {
+      console.log('Chat restored event received for:', restoredChatId);
+
+      // Actualizar la lista de chats para incluir el chat restaurado
+      queryClient.invalidateQueries({ queryKey: ['chats', user.id] });
+    });
+
+    return () => {
+      socket.off('message_received', handleNewMessage);
+      socket.off('chat_restored');
+    };
+  }, [socket, status, user?.id, queryClient, router]);
 
   // Redireccionar al login si no hay sesión
   useEffect(() => {

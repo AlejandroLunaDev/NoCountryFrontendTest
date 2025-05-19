@@ -39,7 +39,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       setStatus('connecting');
-      connectSocket(session.access_token);
+      console.log('Connecting socket with userId:', session.user.id);
+      connectSocket(session.access_token, session.user.id);
     } catch (error) {
       setStatus('error');
       toast.error('Error al conectar al servidor de chat', {
@@ -61,7 +62,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     // Evento de conexión exitosa
     const onConnect = () => {
       setStatus('connected');
-      toast.success('Conectado al chat', { id: 'socket-connection' });
+      // Comentamos o eliminamos el toast de conexión exitosa
+      // toast.success('Conectado al chat', { id: 'socket-connection' });
 
       // Subscribe to general events when connected
       if (session?.userId) {

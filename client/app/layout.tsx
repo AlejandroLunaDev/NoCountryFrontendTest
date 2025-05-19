@@ -8,6 +8,8 @@ import { CustomToaster } from '@/components/ui/custom-toast';
 import { ChatEventHandler } from '@/features/chat/components/chat-event-handler';
 import { Toaster } from 'sonner';
 import { QueryProvider } from '@/lib/providers/query-provider';
+import { NotificationPermission } from '@/features/notifications/components/notification-permission';
+import { PresenceProvider } from '@/features/chat/providers/presence-provider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -35,16 +37,19 @@ export default function RootLayout({
             <div className='min-h-screen'>
               <AuthProvider>
                 <SocketProvider>
-                  <QueryProvider>
-                    <Toaster position='top-center' />
-                    <ChatEventHandler />
-                    <div className='relative flex min-h-screen flex-col'>
-                      <div className='fixed bottom-4 right-4 z-50'>
-                        <CustomToaster />
+                  <PresenceProvider>
+                    <QueryProvider>
+                      <Toaster position='top-center' />
+                      <ChatEventHandler />
+                      <NotificationPermission />
+                      <div className='relative flex min-h-screen flex-col'>
+                        <div className='fixed bottom-4 right-4 z-50'>
+                          <CustomToaster />
+                        </div>
+                        {children}
                       </div>
-                      {children}
-                    </div>
-                  </QueryProvider>
+                    </QueryProvider>
+                  </PresenceProvider>
                 </SocketProvider>
               </AuthProvider>
             </div>

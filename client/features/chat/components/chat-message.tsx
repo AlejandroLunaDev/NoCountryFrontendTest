@@ -49,7 +49,7 @@ export function ChatMessage({
 
   // Verificar si todos los miembros han leído el mensaje
   const hasAllMembersRead = () => {
-    if (!members.length) return false;
+    if (!members || !members.length) return false;
 
     const otherMembers = members.filter(m => m.userId !== user?.id);
     return otherMembers.every(member => message.readBy.includes(member.userId));
@@ -57,7 +57,7 @@ export function ChatMessage({
 
   // Calcular cuántos miembros han leído el mensaje
   const getReadCount = () => {
-    if (!members.length) return 0;
+    if (!members || !members.length) return 0;
 
     const otherMembers = members.filter(m => m.userId !== user?.id);
     return otherMembers.filter(member => message.readBy.includes(member.userId))
@@ -66,7 +66,7 @@ export function ChatMessage({
 
   // Obtener nombres de quienes han leído para el tooltip
   const getReadNames = () => {
-    if (!members.length) return '';
+    if (!members || !members.length) return '';
 
     const readMemberNames = members
       .filter(
