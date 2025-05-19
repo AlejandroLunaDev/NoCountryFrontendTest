@@ -5,13 +5,13 @@ import { useChat } from '../providers/chat-provider';
 import { Chat, Message } from '../services/chat-service';
 import { useAuth } from '@/features/auth/providers/auth-provider';
 import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { useMarkChatAsRead } from '../hooks/use-chat';
 import { usePresence } from '../providers/presence-provider';
 import type { ChatMember } from '../lib/api';
+import { toast } from 'sonner';
 
 // Define a custom message type that works with our UI
 interface UIMessage {
@@ -22,7 +22,6 @@ interface UIMessage {
   chatId: string;
   user: {
     name: string;
-    id?: string;
     userId?: string;
   };
 }
@@ -278,31 +277,48 @@ export function ChatInterface({ chatId }: { chatId: string }) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim() || !currentChat) return;
-
-    updatePresence();
+    if (!messageInput.trim() || !currentChat || !user) return;
 
     setIsSending(true);
     try {
-      await sendMessage(currentChat.id, messageInput);
+      await sendMessage(messageInput);
       setMessageInput('');
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     } catch (error) {
-      console.error('Error sending message:', error);
-    } finally {
-      setIsSending(false);
+      toast.error('Error al enviar mensaje');
+      console.error('Failed to send message:', error);
     }
+    setIsSending(false);
   };
 
   // Prepare messages for UI display
   const prepareMessages = (messages: Message[]): UIMessage[] => {
-    return messages.map(msg => ({
-      ...msg,
-      user: {
-        name: msg.user?.name || 'Unknown',
-        id: msg.user?.id,
-        userId: msg.userId
-      }
-    }));
+    if (!user?.id) return []; // Current user needed for context
+
+    return (messages || []).map(msg => {
+      const isCurrentUser = msg.userId === user.id;
+
+      // Prepare the user object for UIMessage
+      const uiMessageUser = {
+        name:
+          msg.user?.name ||
+          (isCurrentUser
+            ? (user?.user_metadata?.name as string) || user?.email || 'Yo'
+            : 'Usuario Anónimo'),
+        userId: msg.userId // Populate UIMessage.user.userId with the message's senderId (msg.userId)
+      };
+
+      return {
+        id: msg.id,
+        content: msg.content,
+        createdAt: msg.createdAt,
+        userId: msg.userId, // This is the senderId
+        chatId: msg.chatId,
+        user: uiMessageUser
+      } as UIMessage;
+    });
   };
 
   return (

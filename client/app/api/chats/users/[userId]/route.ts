@@ -1,6 +1,37 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+interface User {
+  id: string;
+  name: string | null;
+  email?: string | null; // email is optional in the user projection here
+}
+
+interface ChatMemberFromSupabase {
+  id: string;
+  userId: string;
+  chatId: string;
+  users: User[]; // Changed to User[]
+}
+
+interface MessageFromSupabase {
+  id: string;
+  content: string;
+  senderId: string;
+  chatId: string;
+  createdAt: string;
+  sender: User[] | null; // Changed to User[] | null, assuming sender could be an empty array or null
+}
+
+interface ChatFromSupabase {
+  id: string;
+  name: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  members: ChatMemberFromSupabase[];
+  // lastMessage will be added in the map, so not part of initial fetch type for this var
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { userId: string } }
@@ -39,7 +70,7 @@ export async function GET(
       );
     }
 
-    if (!chatMembers.length) {
+    if (!chatMembers || !chatMembers.length) {
       return NextResponse.json([]);
     }
 
@@ -76,7 +107,7 @@ export async function GET(
 
     // Obtener el último mensaje de cada chat
     const chatsWithLastMessage = await Promise.all(
-      chats.map(async chat => {
+      (chats || []).map(async (chat: ChatFromSupabase) => {
         // Consultar el último mensaje
         const { data: messages, error: messagesError } = await supabase
           .from('messages')
@@ -102,23 +133,33 @@ export async function GET(
           return {
             ...chat,
             lastMessage: null,
-            members: chat.members.map((member: any) => ({
+            members: chat.members.map((member: ChatMemberFromSupabase) => ({
               id: member.id,
               userId: member.userId,
               chatId: member.chatId,
-              name: member.users?.name || 'Usuario'
+              name: member.users[0]?.name || 'Usuario' // Accessing users[0]
             }))
           };
         }
 
+        // Ensure messages[0] and messages[0].sender are correctly typed or handled if potentially undefined
+        const lastMessage =
+          messages && messages.length > 0 ? messages[0] : null;
+        const typedLastMessage = lastMessage
+          ? ({
+              ...lastMessage,
+              sender: lastMessage.sender as User[] | null // Explicit cast for sender
+            } as MessageFromSupabase)
+          : null;
+
         return {
           ...chat,
-          lastMessage: messages.length > 0 ? messages[0] : null,
-          members: chat.members.map((member: any) => ({
+          lastMessage: typedLastMessage,
+          members: chat.members.map((member: ChatMemberFromSupabase) => ({
             id: member.id,
             userId: member.userId,
             chatId: member.chatId,
-            name: member.users?.name || 'Usuario'
+            name: member.users[0]?.name || 'Usuario' // Accessing users[0]
           }))
         };
       })

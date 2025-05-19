@@ -75,8 +75,7 @@ export function useChats() {
               // Prefetch first 20 messages
               queryClient.prefetchQuery({
                 queryKey: ['messages', chat.id],
-                queryFn: () =>
-                  messageApi.getChatMessages(chat.id, { limit: 20 }),
+                queryFn: () => messageApi.getChatMessages(chat.id),
                 staleTime: 30000 // 30 segundos
               });
             });

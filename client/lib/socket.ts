@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 // URL del servidor de WebSockets, configurada para tomar el valor desde las variables de entorno
 // o usar un valor por defecto para desarrollo
 const SOCKET_URL =
-  process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+  process.env.NEXT_PUBLIC_SOCKET_URL || 'https://nocountrytest.onrender.com/';
 
 // Opciones de configuración del socket
 const socketOptions = {
@@ -43,9 +43,10 @@ if (typeof window !== 'undefined') {
     socket.emit('restore_deleted_chat', message.chatId);
 
     // Join the chat channel to receive future messages
+    const currentAuth = socket.auth as { token: string; userId?: string };
     socket.emit('join_chat', {
       chatId: message.chatId,
-      userId: socket.auth?.userId
+      userId: currentAuth?.userId
     });
   });
 
@@ -53,22 +54,22 @@ if (typeof window !== 'undefined') {
   if (DEBUG) {
     socket.onAny((event, ...args) => {
       console.log(`[Socket Event] ${event}:`, args);
-  });
+    });
 
-  socket.on('connect', () => {
-    console.log('[IMPORTANT] Socket connected with ID:', socket.id);
-    logSocketState();
-  });
+    socket.on('connect', () => {
+      console.log('[IMPORTANT] Socket connected with ID:', socket.id);
+      logSocketState();
+    });
 
-  socket.on('connect_error', error => {
-    console.error('[IMPORTANT] Socket connection error:', error);
-    logSocketState();
-  });
+    socket.on('connect_error', error => {
+      console.error('[IMPORTANT] Socket connection error:', error);
+      logSocketState();
+    });
 
-  socket.on('disconnect', reason => {
-    console.warn('[IMPORTANT] Socket disconnected:', reason);
-    logSocketState();
-  });
+    socket.on('disconnect', reason => {
+      console.warn('[IMPORTANT] Socket disconnected:', reason);
+      logSocketState();
+    });
   }
 }
 
@@ -86,12 +87,13 @@ export const connectSocket = (token: string, userId?: string) => {
   // Al conectarse exitosamente, notificar que estamos en línea
   socket.on('connect', () => {
     // El token contiene información del usuario, podemos extraer el userId
-    const userId = (socket.auth as any)?.userId;
+    const currentAuth = socket.auth as { token: string; userId?: string };
+    const currentUserId = currentAuth?.userId;
 
     // Emitir evento de presencia inmediatamente después de conectar
-    if (userId) {
+    if (currentUserId) {
       socket.emit('update_presence', {
-        userId,
+        userId: currentUserId,
         isOnline: true
       });
     }
@@ -108,7 +110,8 @@ export const disconnectSocket = () => {
 // Unirse a un chat
 export const joinChat = (chatId: string) => {
   if (socket.connected) {
-    socket.emit('join_chat', { chatId, userId: socket.auth?.userId });
+    const currentAuth = socket.auth as { token: string; userId?: string };
+    socket.emit('join_chat', { chatId, userId: currentAuth?.userId });
   }
 };
 

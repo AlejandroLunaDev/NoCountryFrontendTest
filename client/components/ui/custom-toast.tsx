@@ -1,5 +1,5 @@
 import React from 'react';
-import { toast, ToastT, Toaster } from 'sonner';
+import { toast, Toaster } from 'sonner';
 import Image from 'next/image';
 import { CheckCircle2, AlertCircle, Info, XCircle } from 'lucide-react';
 

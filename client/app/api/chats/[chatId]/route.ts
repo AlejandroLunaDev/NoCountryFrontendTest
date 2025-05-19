@@ -1,6 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+interface User {
+  id: string;
+  name: string | null;
+  email?: string | null; // email is optional here
+}
+
+interface ChatMemberFromSupabase {
+  id: string;
+  userId: string;
+  chatId: string;
+  users: User[];
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { chatId: string } }
@@ -63,11 +76,11 @@ export async function GET(
     // Formatear miembros
     const formattedChat = {
       ...chat,
-      members: chat.members.map((member: any) => ({
+      members: chat.members.map((member: ChatMemberFromSupabase) => ({
         id: member.id,
         userId: member.userId,
         chatId: member.chatId,
-        name: member.users?.name || 'Usuario'
+        name: member.users[0]?.name || 'Usuario'
       }))
     };
 

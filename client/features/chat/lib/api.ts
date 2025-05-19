@@ -1,5 +1,6 @@
 // URL base del backend
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL || 'https://nocountrytest.onrender.com/';
 
 // Caché simple
 const apiCache: Record<string, { data: any; timestamp: number }> = {};

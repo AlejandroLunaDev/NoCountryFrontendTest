@@ -111,7 +111,7 @@ export function ChatWindow({
 
       // Luego añadimos los mensajes del servidor, que sobrescribirán
       // los temporales si tienen el mismo ID
-      messages.forEach(msg => {
+      messages.forEach((msg: Message) => {
         // Verificar que el mensaje tenga los campos esenciales
         if (msg && msg.id && msg.content && msg.senderId) {
           // Solo procesamos mensajes que aún no hemos visto

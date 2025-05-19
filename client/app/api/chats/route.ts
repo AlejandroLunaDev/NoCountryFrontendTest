@@ -1,6 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+interface User {
+  id: string;
+  name: string | null;
+  email?: string | null;
+}
+
+interface ChatMemberFromSupabase {
+  id: string;
+  userId: string;
+  chatId: string;
+  users: User[];
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = createClient();
@@ -15,10 +28,18 @@ export async function POST(request: Request) {
 
     // Obtener datos de la petición
     const body = await request.json();
-    const { name, type = 'INDIVIDUAL', memberIds = [] } = body;
+    const {
+      name,
+      type = 'INDIVIDUAL',
+      memberIds = []
+    }: {
+      name?: string;
+      type?: 'INDIVIDUAL' | 'GROUP';
+      memberIds: string[];
+    } = body;
 
     // Asegurarse de que el usuario actual esté incluido en memberIds
-    if (!memberIds.includes(session.user.id)) {
+    if (session && !memberIds.includes(session.user.id)) {
       memberIds.push(session.user.id);
     }
 
@@ -51,14 +72,14 @@ export async function POST(request: Request) {
     }
 
     // Crear los miembros del chat
-    const chatMembers = memberIds.map(userId => ({
+    const chatMembersData = memberIds.map((userId: string) => ({
       chatId: chat.id,
       userId
     }));
 
     const { error: membersError } = await supabase
       .from('chat_members')
-      .insert(chatMembers);
+      .insert(chatMembersData);
 
     if (membersError) {
       console.error('Error al crear miembros del chat:', membersError);
@@ -102,12 +123,12 @@ export async function POST(request: Request) {
     // Formatear la respuesta
     const formattedChat = {
       ...fullChat,
-      members: fullChat.members.map((member: any) => ({
+      members: fullChat.members.map((member: ChatMemberFromSupabase) => ({
         id: member.id,
         userId: member.userId,
         chatId: member.chatId,
-        name: member.users?.name || 'Usuario',
-        email: member.users?.email
+        name: member.users[0]?.name || 'Usuario',
+        email: member.users[0]?.email
       }))
     };
 

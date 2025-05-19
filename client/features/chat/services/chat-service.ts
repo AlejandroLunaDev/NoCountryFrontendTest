@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import type { ChatMember as ApiChatMember } from '../lib/api';
 
 export interface Message {
   id: string;
@@ -17,22 +18,19 @@ export interface Chat {
   id: string;
   name: string;
   type: 'PRIVATE' | 'GROUP';
-  members: {
-    id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-    status?: 'ONLINE' | 'OFFLINE' | 'AWAY';
-  }[];
+  members: ApiChatMember[];
   messages: Message[];
 }
 
 export class ChatService {
   private socket: Socket | null = null;
   private baseUrl: string;
+  private token?: string;
 
-  constructor() {
-    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  constructor(token?: string) {
+    this.token = token;
+    this.baseUrl =
+      process.env.NEXT_PUBLIC_API_URL || 'https://nocountrytest.onrender.com/';
   }
 
   connect(userId: string, token: string): Promise<void> {

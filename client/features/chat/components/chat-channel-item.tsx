@@ -52,7 +52,7 @@ export function ChatChannelItem({
   const { onlineUsers } = usePresence();
   const router = useRouter();
   const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    process.env.NEXT_PUBLIC_API_URL || 'https://nocountrytest.onrender.com/';
 
   // Use useMemo to avoid recalculating on every render
   const { otherMemberId, peerName } = useMemo(() => {

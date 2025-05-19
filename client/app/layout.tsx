@@ -3,13 +3,11 @@ import { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import type { Viewport } from 'next';
 import { AuthProvider } from '@/features/auth/providers/auth-provider';
-import { SocketProvider } from '@/features/chat/providers/socket-provider';
 import { CustomToaster } from '@/components/ui/custom-toast';
-import { ChatEventHandler } from '@/features/chat/components/chat-event-handler';
-import { Toaster } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 import { QueryProvider } from '@/lib/providers/query-provider';
-import { NotificationPermission } from '@/features/notifications/components/notification-permission';
-import { PresenceProvider } from '@/features/chat/providers/presence-provider';
+import { ModalProvider } from '@/components/modal-provider';
+import { Suspense } from 'react';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -36,15 +34,17 @@ export default function RootLayout({
           <div>
             <div className='min-h-screen'>
               <AuthProvider>
-                    <QueryProvider>
-                      <Toaster position='top-center' />
-                      <div className='relative flex min-h-screen flex-col'>
-                        <div className='fixed bottom-4 right-4 z-50'>
-                          <CustomToaster />
-                        </div>
-                        {children}
+                <QueryProvider>
+                  <Suspense>
+                    <Toaster position='top-center' />
+                    <div className='relative flex min-h-screen flex-col'>
+                      <div className='fixed bottom-4 right-4 z-50'>
+                        <CustomToaster />
                       </div>
-                    </QueryProvider>
+                      {children}
+                    </div>
+                  </Suspense>
+                </QueryProvider>
               </AuthProvider>
             </div>
           </div>
