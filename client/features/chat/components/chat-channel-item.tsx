@@ -15,6 +15,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePresence } from '../providers/presence-provider';
 import type { ChatMember } from '../lib/api';
 import { useRouter } from 'next/navigation';
+import { useMemo } from 'react';
 
 // ChatMember extendido que incluye user opcional
 interface ExtendedChatMember extends Omit<ChatMember, 'name'> {
@@ -52,82 +53,43 @@ export function ChatChannelItem({
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-  // SOLUCIÓN DIRECTA: Si tenemos los usuarios online en el mapa,
-  // mostramos el indicador verde para cualquier usuario que no sea el actual
+  // Use useMemo to avoid recalculating on every render
+  const { otherMemberId, peerName } = useMemo(() => {
+    let otherId = null;
+    let displayName = name;
 
-  // LÓGICA DIRECTA - Sin estados
-  // 1. Encontrar el otro usuario directamente
-  let otherMemberId = null;
-  let peerName = name;
+    if (!isGroup && Array.isArray(members) && members.length > 0 && user) {
+      const otherMembers = members.filter(member => member.userId !== user.id);
 
-  // Debugging - Mostrar miembros recibidos
-  console.log('Members array:', members);
-  console.log('Current user:', user?.id);
+      if (otherMembers.length > 0) {
+        const otherMember = otherMembers[0];
+        otherId = otherMember.userId;
 
-  if (!isGroup && Array.isArray(members) && members.length > 0 && user) {
-    // Intentar encontrar explícitamente al otro miembro
-    const otherMembers = members.filter(member => {
-      const isOtherMember = member.userId !== user.id;
-      console.log(
-        `Evaluando miembro: ${member.userId} (${
-          isOtherMember ? 'otro' : 'actual'
-        })`
-      );
-      return isOtherMember;
-    });
-
-    console.log('Miembros filtrados:', otherMembers);
-
-    if (otherMembers.length > 0) {
-      const otherMember = otherMembers[0];
-      otherMemberId = otherMember.userId;
-      console.log(`Encontrado otro miembro: ${otherMemberId}`);
-
-      // Determinar su nombre
-      if (otherMember.user?.name) {
-        peerName = otherMember.user.name;
-      } else if (otherMember.user?.email) {
-        peerName = otherMember.user.email.split('@')[0];
-      } else if (otherMember.name) {
-        peerName = otherMember.name;
-      } else {
-        peerName = name !== 'Chat' && name ? name : 'Usuario';
+        // Determine their name
+        if (otherMember.user?.name) {
+          displayName = otherMember.user.name;
+        } else if (otherMember.user?.email) {
+          displayName = otherMember.user.email.split('@')[0];
+        } else if (otherMember.name) {
+          displayName = otherMember.name;
+        } else {
+          displayName = name !== 'Chat' && name ? name : 'Usuario';
+        }
       }
-    } else {
-      console.log('No se encontró otro miembro en el chat');
     }
-  }
 
-  // 2. Verificar si está online directamente
+    return { otherMemberId: otherId, peerName: displayName };
+  }, [isGroup, members, user, name]);
+
+  // Check if user is online - simplified
   const isOnline = otherMemberId
     ? onlineUsers.get(otherMemberId) === true
     : false;
 
-  // Log completo para depuración
-  console.log('Estado online:', {
-    otherMemberId,
-    isOnline,
-    onlineUsers: onlineUsers ? Array.from(onlineUsers.entries()) : [],
-    lookupResult: otherMemberId ? onlineUsers.get(otherMemberId) : 'N/A'
-  });
-
-  // Verificación manual de cada usuario en el mapa
-  if (otherMemberId && onlineUsers && onlineUsers.size > 0) {
-    console.log(`Verificación manual para ${otherMemberId}:`);
-    onlineUsers.forEach((value, key) => {
-      const matches = key === otherMemberId;
-      console.log(
-        `  - Usuario ${key}: ${value ? 'online' : 'offline'} ${
-          matches ? '(COINCIDE)' : ''
-        }`
-      );
-    });
-  }
-
-  // Manejar clic en el chat
+  // Handle click on chat
   const handleClick = () => {
     if (onClick) {
-      // Si tenemos el ID del otro usuario, solicitar su estado de presencia
+      // Request presence state only if needed
       if (otherMemberId) {
         socket.emit('get_user_presence', {
           userId: otherMemberId,
@@ -138,7 +100,7 @@ export function ChatChannelItem({
     }
   };
 
-  // Manejar eliminación del chat
+  // Handle chat deletion
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user?.id) {
@@ -182,14 +144,12 @@ export function ChatChannelItem({
     >
       {!isGroup ? (
         <div className='relative'>
-<div
-  className={cn(
-    'w-3.5 h-3.5 rounded-full absolute -top-1 -left-1 border-2 border-zinc-800',
-    otherMemberId && onlineUsers.get(otherMemberId)
-      ? 'bg-green-500 animate-pulse'
-      : 'bg-zinc-500'
-  )}
-/>
+          <div
+            className={cn(
+              'w-3.5 h-3.5 rounded-full absolute -top-1 -left-1 border-2 border-zinc-800',
+              isOnline ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'
+            )}
+          />
 
           <AtSign className='h-4 w-4 text-zinc-500 group-hover:text-zinc-300 ml-1.5' />
         </div>

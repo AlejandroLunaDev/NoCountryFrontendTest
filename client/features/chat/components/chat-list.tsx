@@ -12,7 +12,7 @@ import {
   LogOut,
   UserPlus
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
@@ -22,9 +22,10 @@ import { Avatar } from '@/components/ui/avatar';
 import { AvatarFallback } from '@/components/ui/avatar';
 import { ChatChannelItem } from './chat-channel-item';
 import { useChats, useCreateChat } from '../hooks/use-chat.ts';
+import type { Chat as ApiChat } from '../lib/api';
 
-// Definir interfaces para mejor tipado
-interface ChatMember {
+// Use explicitly extended interface to avoid type errors
+interface ExtendedChatMember {
   userId: string;
   name?: string;
   user?: {
@@ -50,19 +51,17 @@ export function ChatList() {
   // Force refetch when the component is mounted or when the user changes
   useEffect(() => {
     if (user?.id) {
-      console.log('Refreshing chat list for user:', user.id);
       refetch();
     }
   }, [user?.id, refetch]);
 
-  // Also refetch periodically to catch any missed updates
+  // Also refetch periodically to catch any missed updates - but less frequently
   useEffect(() => {
     const refreshInterval = setInterval(() => {
       if (user?.id) {
-        console.log('Periodic chat list refresh');
         refetch();
       }
-    }, 30000); // Refresh every 30 seconds
+    }, 60000); // Refresh every 60 seconds instead of 30 to reduce load
 
     return () => clearInterval(refreshInterval);
   }, [user?.id, refetch]);
@@ -74,7 +73,8 @@ export function ChatList() {
 
   const handleUserSelect = async (
     selectedUserId: string,
-    _userName: string
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    unusedParam: string
   ) => {
     if (!user?.id) {
       toast.error('No se puede crear chat', {
@@ -103,7 +103,9 @@ export function ChatList() {
 
       toast.success('Chat creado con éxito');
       router.push(`/chat/${newChat.id}`);
-    } catch (_error) {
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error creating chat:', error);
       toast.error('Error al crear chat', {
         description: 'Inténtalo nuevamente'
       });
@@ -130,7 +132,9 @@ export function ChatList() {
       setGroupName('');
       setSelectedUsers([]);
       router.push(`/chat/${newChat.id}`);
-    } catch (_error) {
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error creating group:', error);
       toast.error('Error al crear grupo', {
         description: 'Inténtalo nuevamente'
       });
@@ -142,34 +146,42 @@ export function ChatList() {
       await signOut();
       router.push('/login');
       toast.success('Sesión cerrada');
-    } catch (_error) {
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error signing out:', error);
       toast.error('Error al cerrar sesión');
     }
   };
 
-  // Safely filter chats
-  const filteredChats = Array.isArray(chats)
-    ? chats.filter(chat => {
-        if (!filter) return true;
-        const searchTerm = filter.toLowerCase();
+  // Memoize filtered chats to avoid recalculating on every render
+  const filteredChats = useMemo(() => {
+    return Array.isArray(chats)
+      ? chats.filter(chat => {
+          if (!filter) return true;
+          const searchTerm = filter.toLowerCase();
 
-        const nameMatch = chat.name?.toLowerCase()?.includes(searchTerm);
-        const lastMessageMatch = chat.lastMessage?.content
-          ?.toLowerCase()
-          ?.includes(searchTerm);
-        const memberMatch = chat.members?.some(m =>
-          m.name?.toLowerCase()?.includes(searchTerm)
-        );
+          const nameMatch = chat.name?.toLowerCase()?.includes(searchTerm);
+          const lastMessageMatch = chat.lastMessage?.content
+            ?.toLowerCase()
+            ?.includes(searchTerm);
+          const memberMatch = chat.members?.some(m =>
+            m.name?.toLowerCase()?.includes(searchTerm)
+          );
 
-        return nameMatch || lastMessageMatch || memberMatch;
-      })
-    : [];
+          return nameMatch || lastMessageMatch || memberMatch;
+        })
+      : [];
+  }, [chats, filter]);
 
-  // Separate group and private chats
-  const groupChats = filteredChats.filter(chat => chat.isGroup);
-  const privateChats = filteredChats.filter(chat => !chat.isGroup);
+  // Memoize the separated chats to avoid recalculation
+  const { groupChats, privateChats } = useMemo(() => {
+    return {
+      groupChats: filteredChats.filter(chat => chat.isGroup),
+      privateChats: filteredChats.filter(chat => !chat.isGroup)
+    };
+  }, [filteredChats]);
 
-  const getChatDisplayName = (chat: any): string => {
+  const getChatDisplayName = (chat: ApiChat): string => {
     // Para chats grupales, usar el nombre del grupo
     if (chat.isGroup) {
       return chat.name || 'Grupo';
@@ -178,7 +190,9 @@ export function ChatList() {
     // Para chats individuales (1 a 1), mostrar el nombre del otro usuario
     if (chat.members) {
       // Buscar el miembro que no es el usuario actual
-      const otherMember = chat.members.find((m: any) => m.userId !== user?.id);
+      const otherMember = chat.members.find(m => m.userId !== user?.id) as
+        | ExtendedChatMember
+        | undefined;
 
       // Usar nombre del objeto user anidado, email, o un fallback
       if (otherMember) {

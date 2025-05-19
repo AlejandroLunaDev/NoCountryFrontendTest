@@ -20,8 +20,12 @@ const socketOptions = {
 // Crear instancia del socket
 export const socket = io(SOCKET_URL, socketOptions);
 
-// Debug función que imprime el estado del socket
+// Debug mode flag - set to false in production
+const DEBUG = process.env.NODE_ENV === 'development' && false;
+
+// Debug función que imprime el estado del socket - solo en modo debug
 export const logSocketState = () => {
+  if (!DEBUG) return;
   console.log('Socket state:', {
     id: socket.id,
     connected: socket.connected,
@@ -30,111 +34,42 @@ export const logSocketState = () => {
   });
 };
 
-// Debug eventos
+// Add minimal event handlers for important functionality
 if (typeof window !== 'undefined') {
-  socket.onAny((event, ...args) => {
-    console.log(`[Socket Event] ${event}:`, args);
-  });
-
-  // Add specific listeners for debugging critical events
-  socket.on('notification', notification => {
-    console.log('[IMPORTANT] Notification received:', notification);
-  });
-
+  // Critical handler for messages that require chat restoration
   socket.on('message_received', message => {
-    console.log('[IMPORTANT] Message received:', message);
-
-    // Siempre emitir el evento restore_deleted_chat para asegurar que el chat esté visible
-    // para el usuario actual, independientemente de si fue eliminado previamente
+    // Always emit restore_deleted_chat to ensure the chat is visible
+    // for the current user, regardless of whether it was previously deleted
     socket.emit('restore_deleted_chat', message.chatId);
 
-    // Unirse al canal del chat para recibir futuros mensajes
+    // Join the chat channel to receive future messages
     socket.emit('join_chat', {
       chatId: message.chatId,
       userId: socket.auth?.userId
     });
   });
 
-  socket.on('chat_created', chat => {
-    console.log('[IMPORTANT] Chat created/restored:', chat);
-  });
+  // Only add extensive logging in debug mode
+  if (DEBUG) {
+    socket.onAny((event, ...args) => {
+      console.log(`[Socket Event] ${event}:`, args);
+    });
 
-  socket.on('user_presence_changed', data => {
-    console.log('[IMPORTANT] User presence changed:', data);
-  });
+    socket.on('connect', () => {
+      console.log('[IMPORTANT] Socket connected with ID:', socket.id);
+      logSocketState();
+    });
 
-  socket.on('connect', () => {
-    console.log('[IMPORTANT] Socket connected with ID:', socket.id);
-    logSocketState();
-  });
+    socket.on('connect_error', error => {
+      console.error('[IMPORTANT] Socket connection error:', error);
+      logSocketState();
+    });
 
-  socket.on('connect_error', error => {
-    console.error('[IMPORTANT] Socket connection error:', error);
-    logSocketState();
-  });
-
-  socket.on('disconnect', reason => {
-    console.warn('[IMPORTANT] Socket disconnected:', reason);
-    logSocketState();
-  });
-
-  socket.on('reconnect', attemptNumber => {
-    console.log(
-      '[IMPORTANT] Socket reconnected after',
-      attemptNumber,
-      'attempts'
-    );
-    logSocketState();
-  });
-
-  socket.on('reconnect_attempt', attemptNumber => {
-    console.log('[IMPORTANT] Socket reconnect attempt:', attemptNumber);
-  });
-
-  socket.on('reconnect_error', error => {
-    console.error('[IMPORTANT] Socket reconnect error:', error);
-  });
-
-  socket.on('reconnect_failed', () => {
-    console.error('[IMPORTANT] Socket reconnect failed after max attempts');
-  });
-
-  // Debug API requests
-  const originalFetch = window.fetch;
-  window.fetch = async function (input, init) {
-    const url = typeof input === 'string' ? input : input.url;
-
-    if (url.includes('/api/')) {
-      console.log('[API Request]', {
-        url,
-        method: init?.method || 'GET',
-        body: init?.body ? JSON.parse(init.body.toString()) : undefined
-      });
-
-      try {
-        const response = await originalFetch(input, init);
-        const responseClone = response.clone();
-
-        try {
-          const data = await responseClone.json();
-          console.log('[API Response]', { url, status: response.status, data });
-        } catch (e) {
-          console.log('[API Response]', {
-            url,
-            status: response.status,
-            text: 'No JSON body'
-          });
-        }
-
-        return response;
-      } catch (error) {
-        console.error('[API Error]', { url, error });
-        throw error;
-      }
-    }
-
-    return originalFetch(input, init);
-  };
+    socket.on('disconnect', reason => {
+      console.warn('[IMPORTANT] Socket disconnected:', reason);
+      logSocketState();
+    });
+  }
 }
 
 // Función para conectar el socket con autenticación
@@ -155,7 +90,6 @@ export const connectSocket = (token: string, userId?: string) => {
 
     // Emitir evento de presencia inmediatamente después de conectar
     if (userId) {
-      console.log('[IMPORTANT] Emitting presence update for user:', userId);
       socket.emit('update_presence', {
         userId,
         isOnline: true

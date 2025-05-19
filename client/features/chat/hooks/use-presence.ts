@@ -1,54 +1,57 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../providers/socket-provider';
 import { useAuth } from '@/features/auth/providers/auth-provider';
 import socket from '@/lib/socket';
 
-// Mapa global de usuarios online
+// Global map of online users
 const onlineUsers = new Map<string, boolean>();
 
 export function usePresence() {
   const { status } = useSocket();
   const { user } = useAuth();
   const [onlineStatus, setOnlineStatus] = useState<Map<string, boolean>>(
-    new Map()
+    new Map(onlineUsers)
   );
 
-  // Función para actualizar el estado de forma forzada
-  const forceUpdateOnlineStatus = () => {
-    setOnlineStatus(new Map(onlineUsers));
-    console.log('FORZANDO ACTUALIZACIÓN:', Array.from(onlineUsers.entries()));
-  };
+  // Optimized update function that only triggers renders when there's a change
+  const updateOnlineStatus = useCallback(
+    (userId: string, isOnline: boolean) => {
+      const currentValue = onlineUsers.get(userId);
+
+      // Only update if the value actually changed
+      if (currentValue !== isOnline) {
+        onlineUsers.set(userId, isOnline);
+        setOnlineStatus(new Map(onlineUsers));
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (status !== 'connected' || !socket || !user?.id) return;
 
-    // Marcar usuario actual como online
-    onlineUsers.set(user.id, true);
-    forceUpdateOnlineStatus();
+    // Mark current user as online
+    updateOnlineStatus(user.id, true);
 
-    // Notificar que estamos online
+    // Notify that we're online
     socket.emit('update_presence', {
       userId: user.id,
       isOnline: true
     });
 
-    // Manejar cambios de presencia
+    // Handle presence changes
     const handlePresenceChange = (data: {
       userId: string;
       isOnline: boolean;
     }) => {
       if (data.userId && typeof data.isOnline === 'boolean') {
-        console.log(
-          `⚠️ ACTUALIZANDO ESTADO DE ${data.userId}: ${data.isOnline}`
-        );
-        onlineUsers.set(data.userId, data.isOnline);
-        forceUpdateOnlineStatus();
+        updateOnlineStatus(data.userId, data.isOnline);
       }
     };
 
-    // Manejador específico para user_presence_status
+    // Handler for user_presence_status
     const handleUserPresenceStatus = (data: {
       userId: string;
       chatId: string;
@@ -56,24 +59,18 @@ export function usePresence() {
       lastSeen?: string;
     }) => {
       if (data.userId && typeof data.isOnline === 'boolean') {
-        console.log(
-          `🟢 PRESENCIA EXPLÍCITA: ${data.userId} está ${
-            data.isOnline ? 'ONLINE' : 'OFFLINE'
-          }`
-        );
-        onlineUsers.set(data.userId, data.isOnline);
-        forceUpdateOnlineStatus();
+        updateOnlineStatus(data.userId, data.isOnline);
       }
     };
 
-    // Suscribirse a eventos de presencia
+    // Subscribe to presence events
     socket.on('user_presence_changed', handlePresenceChange);
     socket.on('user_presence_status', handleUserPresenceStatus);
 
-    // Solicitar estado de todos los usuarios al iniciar
+    // Request status of all users on start
     socket.emit('get_all_online_users');
 
-    // Limpiar al desmontar
+    // Cleanup on unmount
     return () => {
       socket.off('user_presence_changed', handlePresenceChange);
       socket.off('user_presence_status', handleUserPresenceStatus);
@@ -85,19 +82,34 @@ export function usePresence() {
         });
       }
     };
-  }, [status, user?.id]);
+  }, [status, user?.id, updateOnlineStatus]);
 
-  // Función para verificar si un usuario está en línea - con log explícito
+  // Simple function to check if a user is online
   const isUserOnline = (userId: string): boolean => {
     if (!userId) return false;
-    const isOnline = onlineUsers.get(userId) === true;
-    console.log(`👁️ CONSULTANDO ONLINE: ${userId} => ${isOnline}`);
-    return isOnline;
+    return onlineUsers.get(userId) === true;
   };
+
+  // Subscription function for components that need to track specific users
+  const subscribeToPresence = useCallback(
+    (userId: string, callback: (userId: string, isOnline: boolean) => void) => {
+      // Initial callback with current status
+      const currentStatus = onlineUsers.get(userId) === true;
+      callback(userId, currentStatus);
+
+      // Return a function to check updated status on demand
+      return () => {
+        const latestStatus = onlineUsers.get(userId) === true;
+        callback(userId, latestStatus);
+      };
+    },
+    []
+  );
 
   return {
     onlineUsers: onlineStatus,
     isUserOnline,
+    subscribeToPresence,
     updatePresence: () => {
       if (status === 'connected' && socket && user?.id) {
         socket.emit('update_presence', {

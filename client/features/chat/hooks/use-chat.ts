@@ -60,6 +60,29 @@ export function useChats() {
           retryCountRef.current = 0;
         }
 
+        // Prefetch all chats to enable instant navigation
+        if (result && Array.isArray(result)) {
+          // Batch prefetching in the next tick to not block UI
+          setTimeout(() => {
+            result.forEach(chat => {
+              // Prefetch chat details
+              queryClient.prefetchQuery({
+                queryKey: ['chat', chat.id],
+                queryFn: () => chatApi.getChatById(chat.id),
+                staleTime: 60000 // 1 minuto
+              });
+
+              // Prefetch first 20 messages
+              queryClient.prefetchQuery({
+                queryKey: ['messages', chat.id],
+                queryFn: () =>
+                  messageApi.getChatMessages(chat.id, { limit: 20 }),
+                staleTime: 30000 // 30 segundos
+              });
+            });
+          }, 0);
+        }
+
         return result;
       } catch (error) {
         setHasError(true);
@@ -74,9 +97,9 @@ export function useChats() {
         return [];
       }
     },
-    staleTime: 5000,
+    staleTime: 30000, // Aumentamos a 30 segundos para reducir refetches
     enabled: !!user?.id,
-    refetchInterval: hasError ? 5000 : status === 'connected' ? false : 15000,
+    refetchInterval: hasError ? 5000 : status === 'connected' ? false : 30000,
     refetchOnWindowFocus: false,
     retry: false,
     retryOnMount: false
@@ -228,6 +251,9 @@ export function useMessages(chatId: string) {
       try {
         if (!chatId) return [];
 
+        // Check if we already have messages in cache to show immediately
+        const existingMessages = queryClient.getQueryData<Message[]>(queryKey);
+
         // Si ya tuvimos errores previos, incrementamos el retraso
         if (hasError) {
           await new Promise(resolve =>
@@ -249,10 +275,10 @@ export function useMessages(chatId: string) {
 
         return result;
       } catch (error) {
+        console.error(`Error fetching messages for chat ${chatId}:`, error);
         setHasError(true);
-        console.error('Error fetching messages:', error);
 
-        // Devolver los datos existentes si tenemos, para evitar UI vacía
+        // Use cached data in case of error
         const existingData = queryClient.getQueryData<Message[]>(queryKey);
         if (existingData && existingData.length > 0) {
           return existingData;
@@ -261,12 +287,14 @@ export function useMessages(chatId: string) {
         return [];
       }
     },
-    staleTime: 3000, // 3 segundos es suficiente
-    enabled: !!chatId && !!user?.id,
-    refetchInterval: hasError ? 5000 : status === 'connected' ? false : 10000, // Diferentes intervalos según estado
-    refetchOnWindowFocus: false, // Evita refetch en focus para prevenir bucles
-    retry: false, // Manejamos nuestro propio sistema de reintento
-    retryOnMount: false
+    staleTime: 10000, // 10 segundos
+    cacheTime: 3600000, // Cache for 1 hour
+    refetchOnMount: false, // Don't refetch when component mounts
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    retry: false,
+    keepPreviousData: true, // Mantener datos anteriores mientras carga nuevos
+    placeholderData: [], // Mostrar array vacío hasta tener datos
+    enabled: !!chatId
   });
 
   useEffect(() => {

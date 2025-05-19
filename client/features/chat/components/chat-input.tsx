@@ -30,7 +30,7 @@ export function ChatInput({
 
     const resizeTextarea = () => {
       textarea.style.height = 'auto';
-      textarea.style.height = textarea.scrollHeight + 'px';
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'; // Limitar altura máxima
     };
 
     textarea.addEventListener('input', resizeTextarea);
@@ -68,23 +68,17 @@ export function ChatInput({
     onTyping(e.target.value);
   };
 
-  // Format typing indicator message
-  const formatTypingMessage = () => {
-    if (typingUsers.length === 0) return '';
-    if (typingUsers.length === 1)
-      return `${typingUsers[0]} está escribiendo...`;
-    if (typingUsers.length === 2)
-      return `${typingUsers[0]} y ${typingUsers[1]} están escribiendo...`;
-    return 'Varias personas están escribiendo...';
-  };
-
   return (
-    <div className='p-4 border-t border-zinc-800 bg-zinc-900'>
+    <div className='relative'>
       {/* Typing indicator */}
       {typingUsers.length > 0 && (
-        <div className='h-5 mb-2'>
-          <p className='text-xs text-indigo-400 animate-pulse'>
-            {formatTypingMessage()}
+        <div className='absolute -top-6 left-2 right-2'>
+          <p className='text-xs text-zinc-400 italic'>
+            {typingUsers.length === 1
+              ? `${typingUsers[0]} está escribiendo...`
+              : typingUsers.length === 2
+              ? `${typingUsers[0]} y ${typingUsers[1]} están escribiendo...`
+              : 'Varias personas están escribiendo...'}
           </p>
         </div>
       )}
@@ -97,19 +91,21 @@ export function ChatInput({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
-          className='min-h-10 max-h-40 py-3 pr-24 resize-none bg-zinc-800 border-zinc-700 focus:border-indigo-500 text-white placeholder:text-zinc-400 rounded-xl'
+          className={`min-h-10 max-h-40 py-3 pr-24 resize-none bg-zinc-800 border-zinc-700 focus-visible:ring-zinc-600 text-white placeholder:text-zinc-400 rounded-md transition ${
+            isDisabled ? 'opacity-70' : 'opacity-100'
+          }`}
           rows={1}
         />
 
-        <div className='absolute right-2 bottom-1.5 flex items-center gap-2'>
+        <div className='absolute right-2 bottom-1.5 flex items-center gap-1.5'>
           <Button
             type='button'
             size='icon'
             variant='ghost'
-            className='rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'
+            className='rounded-full h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'
             disabled={isDisabled}
           >
-            <Paperclip className='h-5 w-5' />
+            <Paperclip className='h-4 w-4' />
             <span className='sr-only'>Adjuntar archivo</span>
           </Button>
 
@@ -117,10 +113,10 @@ export function ChatInput({
             type='button'
             size='icon'
             variant='ghost'
-            className='rounded-full text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'
+            className='rounded-full h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700'
             disabled={isDisabled}
           >
-            <Smile className='h-5 w-5' />
+            <Smile className='h-4 w-4' />
             <span className='sr-only'>Emojis</span>
           </Button>
 
@@ -129,7 +125,7 @@ export function ChatInput({
             type='button'
             size='icon'
             disabled={!message.trim() || isDisabled}
-            className='rounded-full bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-zinc-700 disabled:text-zinc-400'
+            className='rounded-full h-8 w-8 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-zinc-700 disabled:text-zinc-400 transition-colors'
           >
             <Send className='h-4 w-4' />
             <span className='sr-only'>Enviar</span>

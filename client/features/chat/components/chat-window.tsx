@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import { useSendMessage } from '../hooks/use-chat.ts';
 import { useAuth } from '@/features/auth/providers/auth-provider';
-import { Separator } from '@/components/ui/separator';
 import type { Message } from '../lib/api';
 
 interface ChatWindowProps {
@@ -25,6 +24,7 @@ interface ChatWindowProps {
   chatName?: string;
   isGroup?: boolean;
   onBack?: () => void;
+  isLoading?: boolean;
 }
 
 interface ProcessedMessage extends Message {
@@ -39,11 +39,12 @@ export function ChatWindow({
   chatId,
   chatName = 'Chat',
   isGroup = false,
-  onBack
+  onBack,
+  isLoading = false
 }: ChatWindowProps) {
   const {
     data: messages = [],
-    isLoading,
+    isLoading: messagesLoading,
     error: messagesError
   } = useMessages(chatId);
   const { sendMessage, sendTyping, pendingMessages } = useSendMessage();
@@ -55,6 +56,9 @@ export function ChatWindow({
   const [isErrorVisible, setIsErrorVisible] = useState(false);
   const messageProcessedRef = useRef(new Set<string>());
   const previousMessagesRef = useRef<Message[] | null>(null);
+
+  // Combine loading states
+  const isLoadingMessages = isLoading || messagesLoading;
 
   // Mostrar mensaje de error si hay problemas cargando mensajes
   useEffect(() => {
@@ -280,154 +284,139 @@ export function ChatWindow({
   };
 
   return (
-    <div className='flex flex-col h-screen bg-zinc-900 dark:bg-zinc-800 w-full'>
-      {/* Channel header */}
-      <div className='h-12 border-b dark:border-zinc-700 px-4 flex items-center justify-between bg-zinc-800 shadow-sm'>
-        <div className='flex items-center'>
+    <div className='flex flex-col h-full bg-zinc-800 overflow-hidden relative'>
+      {/* Chat header */}
+      <div className='h-14 min-h-[56px] border-b border-zinc-700 flex items-center px-4 gap-1.5'>
+        <div className='md:hidden'>
           <Button
+            size='icon'
+            variant='ghost'
             onClick={handleBack}
-            variant='ghost'
-            size='icon'
-            className='mr-2 lg:hidden text-zinc-500 dark:text-zinc-400'
+            className='h-8 w-8'
           >
-            <ArrowLeft className='h-5 w-5' />
-          </Button>
-
-          {isGroup ? (
-            <Hash className='h-5 w-5 text-zinc-400 mr-2' />
-          ) : (
-            <AtSign className='h-5 w-5 text-zinc-400 mr-2' />
-          )}
-
-          <h2 className='font-semibold text-zinc-200'>{chatName}</h2>
-        </div>
-
-        <div className='flex items-center gap-1'>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
-          >
-            <Bell className='h-5 w-5' />
-          </Button>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
-          >
-            <Pin className='h-5 w-5' />
-          </Button>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
-          >
-            <Users className='h-5 w-5' />
-          </Button>
-          <div className='mx-2'>
-            <Separator orientation='vertical' className='h-6' />
-          </div>
-          <div className='relative'>
-            <input
-              type='text'
-              placeholder='Buscar'
-              className='h-6 bg-zinc-700 rounded-md text-xs px-2 py-1 w-40 focus:outline-none focus:ring-1 focus:ring-primary text-zinc-200'
-            />
-          </div>
-          <Button
-            variant='ghost'
-            size='icon'
-            className='text-zinc-400 h-8 w-8 hover:text-zinc-200 hover:bg-zinc-700'
-          >
-            <HelpCircle className='h-5 w-5' />
+            <ArrowLeft className='h-4 w-4' />
           </Button>
         </div>
-      </div>
-
-      {/* Messages area with welcome banner for empty chats */}
-      <div className='flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 pb-4 bg-zinc-900'>
-        {/* Error message toast */}
-        {isErrorVisible && (
-          <div className='fixed top-4 right-4 bg-red-500/90 text-white px-4 py-3 rounded-md shadow-lg animate-in fade-in slide-in-from-top-5 z-50'>
-            <div className='flex items-center'>
-              <svg
-                xmlns='http://www.w3.org/2000/svg'
-                className='h-5 w-5 mr-2'
-                viewBox='0 0 20 20'
-                fill='currentColor'
-              >
-                <path
-                  fillRule='evenodd'
-                  d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z'
-                  clipRule='evenodd'
-                />
-              </svg>
-              <p>
-                No se pudieron cargar los mensajes. Intentándolo de nuevo...
-              </p>
-            </div>
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className='flex items-center justify-center h-full'>
-            <div className='animate-pulse text-zinc-400'>
-              Cargando mensajes...
-            </div>
-          </div>
-        ) : processedMessages.length === 0 ? (
-          <div className='h-full flex flex-col'>
-            {/* Welcome banner */}
-            <div className='flex-1 flex flex-col items-center justify-center px-8 text-center'>
-              <div className='w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6'>
-                {isGroup ? (
-                  <Hash className='h-8 w-8 text-primary' />
-                ) : (
-                  <AtSign className='h-8 w-8 text-primary' />
-                )}
-              </div>
-              <h3 className='font-bold text-xl mb-3 text-zinc-200'>
-                Bienvenido a {isGroup ? '#' : ''}
-                {chatName}
-              </h3>
-              <p className='text-zinc-400 max-w-md mb-6'>
-                {isGroup
-                  ? `Este es el comienzo del canal #${chatName}. Envía un mensaje para iniciar la conversación.`
-                  : `Este es el comienzo de tu conversación con ${chatName}. Envía un mensaje para comenzar.`}
-              </p>
-
-              <Button
-                variant='outline'
-                className='mt-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
-              >
-                <Users className='h-4 w-4 mr-2' />
-                Invitar usuarios
-              </Button>
-            </div>
-          </div>
+        {isGroup ? (
+          <Hash className='h-5 w-5 text-zinc-500 mr-1' />
         ) : (
-          <div className='pt-6 px-4 space-y-2'>
-            {processedMessages.map(message => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isFirstInGroup={message.isFirstInGroup}
-                isLastInGroup={message.isLastInGroup}
-                isPending={message.isPending}
-              />
+          <AtSign className='h-5 w-5 text-zinc-500 mr-1' />
+        )}
+
+        <div className='flex flex-col'>
+          <h2 className='text-md font-semibold text-white'>{chatName}</h2>
+          {/* Mostrar un indicador de carga sutil en vez de spinner completo */}
+          {isLoadingMessages ? (
+            <span className='text-xs text-zinc-400'>Cargando mensajes...</span>
+          ) : (
+            <span className='text-xs text-zinc-400'>
+              {isGroup ? 'Canal de grupo' : 'Mensaje directo'}
+            </span>
+          )}
+        </div>
+
+        <div className='ml-auto flex items-center gap-2'>
+          <Button variant='ghost' size='icon' className='h-8 w-8'>
+            <Bell className='h-4 w-4 text-zinc-500' />
+          </Button>
+          <Button variant='ghost' size='icon' className='h-8 w-8'>
+            <Pin className='h-4 w-4 text-zinc-500' />
+          </Button>
+          <Button variant='ghost' size='icon' className='h-8 w-8'>
+            <Users className='h-4 w-4 text-zinc-500' />
+          </Button>
+          <Button variant='ghost' size='icon' className='h-8 w-8'>
+            <HelpCircle className='h-4 w-4 text-zinc-500' />
+          </Button>
+        </div>
+      </div>
+
+      {/* Chat messages area */}
+      <div className='flex-1 overflow-y-auto p-4 space-y-4'>
+        {isErrorVisible && (
+          <div className='p-3 bg-red-500/10 border border-red-500/20 rounded-md mb-4'>
+            <p className='text-sm text-red-300'>
+              Error al cargar mensajes. Intenta recargar la página.
+            </p>
+          </div>
+        )}
+
+        {/* Mostrar mensaje cuando no hay mensajes */}
+        {!isLoadingMessages && processedMessages.length === 0 && (
+          <div className='flex flex-col items-center justify-center h-full'>
+            <div className='rounded-full bg-zinc-700 p-3 mb-4'>
+              {isGroup ? (
+                <Hash className='h-6 w-6 text-zinc-300' />
+              ) : (
+                <AtSign className='h-6 w-6 text-zinc-300' />
+              )}
+            </div>
+            <h3 className='text-lg font-medium text-zinc-300 mb-1'>
+              {isGroup
+                ? 'Bienvenido al inicio del canal'
+                : 'Bienvenido a tu nuevo chat'}
+            </h3>
+            <p className='text-sm text-zinc-400 text-center max-w-md'>
+              {isGroup
+                ? 'Este es el comienzo del canal. Sé respetuoso con los demás miembros.'
+                : 'Este es el comienzo de tu conversación. Envía un mensaje para comenzar.'}
+            </p>
+          </div>
+        )}
+
+        {/* Si está cargando y no hay mensajes, mostrar skeletons */}
+        {isLoadingMessages && processedMessages.length === 0 && (
+          <div className='space-y-4'>
+            {Array.from({ length: 3 }, (_, i) => (
+              <div key={i} className='flex items-start gap-2 animate-pulse'>
+                <div className='h-8 w-8 rounded-full bg-zinc-700' />
+                <div className='space-y-2 flex-1'>
+                  <div className='h-4 w-24 bg-zinc-700 rounded' />
+                  <div className='h-10 bg-zinc-700 rounded w-3/4' />
+                </div>
+              </div>
             ))}
-            <div ref={messagesEndRef} />
+          </div>
+        )}
+
+        {/* Mostrar mensajes */}
+        {processedMessages.map((message, index) => (
+          <ChatMessage
+            key={message.id}
+            id={message.id}
+            content={message.content}
+            sender={message.sender?.name || 'Usuario'}
+            isCurrentUser={message.senderId === user?.id}
+            timestamp={message.createdAt}
+            showSender={message.showSender}
+            isFirstInGroup={message.isFirstInGroup}
+            isLastInGroup={message.isLastInGroup}
+            isPending={message.isPending}
+            replyTo={message.replyToId}
+          />
+        ))}
+        <div ref={messagesEndRef} />
+
+        {/* Typing indicator */}
+        {typingUsers.length > 0 && (
+          <div className='text-xs text-zinc-400 italic'>
+            {typingUsers.join(', ')}{' '}
+            {typingUsers.length === 1 ? 'está' : 'están'} escribiendo...
           </div>
         )}
       </div>
 
-      {/* Message input area */}
-      <div className='border-t border-zinc-800 bg-zinc-900'>
+      {/* Chat input */}
+      <div className='p-4 border-t border-zinc-700'>
         <ChatInput
           onSend={handleSendMessage}
           onTyping={handleTyping}
-          isDisabled={isLoading}
-          typingUsers={typingUsers}
+          isDisabled={isLoadingMessages}
+          placeholder={
+            isLoadingMessages
+              ? 'Cargando chat...'
+              : `Mensaje a ${isGroup ? chatName : chatName.split(' ')[0]}`
+          }
         />
       </div>
     </div>
