@@ -2,17 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   serverRuntimeConfig: {},
-  async rewrites() {
-    if (process.env.NODE_ENV !== 'production') {
-      return [
-        {
-          source: '/api/:path*',
-          destination: 'https://nocountrytest.onrender.com/api/:path*'
-        }
-      ];
-    }
-    return [];
-  }
+
   /* config options here */
 };
 

@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/login", "dest": "/(auth)/login" },
+    { "src": "/register", "dest": "/(auth)/register" },
+    { "src": "/dashboard", "dest": "/(protected)/dashboard" },
+    { "src": "/chat", "dest": "/(protected)/chat" },
+    { "src": "/chat/(.*)", "dest": "/(protected)/chat/$1" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
+}
