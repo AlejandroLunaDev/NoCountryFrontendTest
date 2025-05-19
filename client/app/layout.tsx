@@ -6,7 +6,6 @@ import { AuthProvider } from '@/features/auth/providers/auth-provider';
 import { CustomToaster } from '@/components/ui/custom-toast';
 import { Toaster } from '@/components/ui/sonner';
 import { QueryProvider } from '@/lib/providers/query-provider';
-import { ModalProvider } from '@/components/modal-provider';
 import { Suspense } from 'react';
 
 const inter = Inter({ subsets: ['latin'] });
