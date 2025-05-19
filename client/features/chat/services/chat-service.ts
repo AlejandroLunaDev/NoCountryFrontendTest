@@ -16,7 +16,7 @@ export interface Message {
 export interface Chat {
   id: string;
   name: string;
-  type: 'INDIVIDUAL' | 'GROUP';
+  type: 'PRIVATE' | 'GROUP';
   members: {
     id: string;
     name: string;
@@ -119,7 +119,7 @@ export class ChatService {
   async createChat(
     name: string,
     memberIds: string[],
-    type: 'INDIVIDUAL' | 'GROUP'
+    type: 'PRIVATE' | 'GROUP'
   ): Promise<Chat | null> {
     if (!this.socket) return null;
 

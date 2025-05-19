@@ -11,6 +11,9 @@ import { useSendMessage } from '../hooks/use-chat.ts';
 import { useAuth } from '@/features/auth/providers/auth-provider';
 import type { Message, ChatMember } from '../lib/api';
 import { ChatMembersSidebar } from './chat-members-sidebar';
+import { useSocket } from '../providers/socket-provider';
+import { useQueryClient } from '@tanstack/react-query';
+import socket from '@/lib/socket';
 
 interface ChatWindowProps {
   chatId: string;
@@ -51,6 +54,8 @@ export function ChatWindow({
   const [isErrorVisible, setIsErrorVisible] = useState(false);
   const messageProcessedRef = useRef(new Set<string>());
   const previousMessagesRef = useRef<Message[] | null>(null);
+  const { socket, status } = useSocket();
+  const queryClient = useQueryClient();
 
   // Combine loading states
   const isLoadingMessages = isLoading || messagesLoading;
@@ -317,6 +322,36 @@ export function ChatWindow({
     return Array.from(membersMap.values());
   }, [isGroup, localMessages, chatId, members]);
 
+  // Escuchar eventos de socket para actualizar los miembros del chat
+  useEffect(() => {
+    if (!socket || !isGroup || status !== 'connected') return;
+
+    console.log(`Subscribing to member updates for chat: ${chatId}`);
+
+    // Escuchar evento de miembro añadido
+    const handleMemberAdded = (data: any) => {
+      if (data.chatId === chatId) {
+        console.log('New member added to chat, refreshing members list:', data);
+        // Invalidar la caché para forzar una recarga
+        queryClient.invalidateQueries({ queryKey: ['chat', chatId] });
+        // También actualizar la lista local de miembros si es necesario
+        queryClient.refetchQueries({ queryKey: ['messages', chatId] });
+      }
+    };
+
+    // Suscribirse a eventos
+    socket.on('member_added', handleMemberAdded);
+    socket.on('chat_updated', handleMemberAdded);
+
+    // Emitir un evento para unirse específicamente a actualizaciones de este chat
+    socket.emit('subscribe_chat_updates', chatId);
+
+    return () => {
+      socket.off('member_added', handleMemberAdded);
+      socket.off('chat_updated', handleMemberAdded);
+    };
+  }, [socket, chatId, isGroup, status, queryClient]);
+
   return (
     <div className='flex h-full overflow-hidden'>
       <div className='flex flex-col flex-1 bg-zinc-800 overflow-hidden relative'>
@@ -459,7 +494,11 @@ export function ChatWindow({
       </div>
 
       {/* Lista de miembros (solo visible en chats grupales) */}
-      <ChatMembersSidebar members={chatMembers} isVisible={isGroup} />
+      <ChatMembersSidebar
+        members={chatMembers}
+        isVisible={isGroup}
+        chatId={chatId}
+      />
     </div>
   );
 }

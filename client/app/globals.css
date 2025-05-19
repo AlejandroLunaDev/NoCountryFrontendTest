@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -118,5 +118,56 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Estilos para textarea con comportamiento de línea única/múltiple */
+  textarea {
+    overflow-x: hidden;
+    word-wrap: break-word;
+    word-break: normal;
+    line-height: 1.5;
+    transition: height 0.1s ease-out;
+  }
+
+  /* Estado sin scroll cuando hay una sola línea */
+  textarea.overflow-hidden {
+    overflow-y: hidden;
+  }
+
+  /* Estado con scroll cuando hay múltiples líneas */
+  textarea.overflow-y-auto {
+    overflow-y: auto;
+  }
+
+  /* Eliminar flechas (spin buttons) de los inputs */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  /* Firefox */
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  /* Asegurar que los elementos de la interfaz de chat no desborden */
+  .chat-interface textarea {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+    max-width: 100%;
+    transition: height 0.1s ease;
+  }
+
+  /* Estilos para el contenido de mensajes */
+  .chat-message-content {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+    max-width: 100%;
   }
 }

@@ -64,26 +64,29 @@ export function ChatMessage({
     >
       {!isCurrentUser && isFirstInGroup && (
         <Avatar className='h-8 w-8'>
-          <AvatarImage
-            src={`https://ui-avatars.com/api/?name=${sender}`}
-          />
+          <AvatarImage src={`https://ui-avatars.com/api/?name=${sender}`} />
           <AvatarFallback>{getInitials()}</AvatarFallback>
         </Avatar>
       )}
 
       {!isCurrentUser && !isFirstInGroup && <div className='w-8' />}
 
-      <div className={cn('flex flex-col max-w-[75%]', isCurrentUser && 'items-end')}>
+      <div
+        className={cn(
+          'flex flex-col max-w-[75%]',
+          isCurrentUser && 'items-end'
+        )}
+      >
         {isFirstInGroup && !isCurrentUser && (
-          <div className='text-xs font-medium text-zinc-500 mb-1'>
-            {sender}
-          </div>
+          <div className='text-xs font-medium text-zinc-500 mb-1'>{sender}</div>
         )}
 
         <div
           className={cn(
-            'rounded-lg px-3 py-2 text-sm',
-            isCurrentUser ? 'bg-indigo-600 text-white' : 'bg-zinc-700 text-zinc-100'
+            'rounded-lg px-3 py-2 text-sm break-words overflow-wrap-anywhere overflow-hidden',
+            isCurrentUser
+              ? 'bg-indigo-600 text-white'
+              : 'bg-zinc-700 text-zinc-100'
           )}
         >
           {content}

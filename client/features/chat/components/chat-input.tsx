@@ -23,23 +23,42 @@ export function ChatInput({
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Auto-resize textarea
-  useEffect(() => {
+  // Auto-resize textarea y manejar scroll
+  const adjustTextarea = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    const resizeTextarea = () => {
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px'; // Limitar altura máxima
-    };
+    // Resetear altura
+    textarea.style.height = 'auto';
 
-    textarea.addEventListener('input', resizeTextarea);
-    resizeTextarea();
+    // Calcular si hay múltiples líneas
+    const lineCount = (textarea.value.match(/\n/g) || []).length + 1;
+    const newHeight = Math.min(textarea.scrollHeight, 200);
 
+    // Mostrar scroll solo cuando hay múltiples líneas
+    if (lineCount > 1 || newHeight > textarea.clientHeight) {
+      textarea.classList.remove('overflow-hidden');
+      textarea.classList.add('overflow-y-auto');
+    } else {
+      textarea.classList.add('overflow-hidden');
+      textarea.classList.remove('overflow-y-auto');
+    }
+
+    // Ajustar altura
+    textarea.style.height = `${newHeight}px`;
+  };
+
+  // Ajustar cuando se monta y cuando cambia el mensaje
+  useEffect(() => {
+    if (!textareaRef.current) return;
+    adjustTextarea();
+
+    const textarea = textareaRef.current;
+    textarea.addEventListener('input', adjustTextarea);
     return () => {
-      textarea.removeEventListener('input', resizeTextarea);
+      textarea.removeEventListener('input', adjustTextarea);
     };
-  }, []);
+  }, [message]);
 
   // Handle sending a message
   const handleSend = () => {
@@ -51,6 +70,8 @@ export function ChatInput({
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
+      textareaRef.current.classList.add('overflow-hidden');
+      textareaRef.current.classList.remove('overflow-y-auto');
     }
   };
 
@@ -91,7 +112,7 @@ export function ChatInput({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
-          className={`min-h-10 max-h-40 py-3 pr-24 resize-none bg-zinc-800 border-zinc-700 focus-visible:ring-zinc-600 text-white placeholder:text-zinc-400 rounded-md transition ${
+          className={`min-h-10 max-h-40 py-3 pr-24 resize-none bg-zinc-800 border-zinc-700 focus-visible:ring-zinc-600 text-white placeholder:text-zinc-400 rounded-md transition overflow-hidden ${
             isDisabled ? 'opacity-70' : 'opacity-100'
           }`}
           rows={1}

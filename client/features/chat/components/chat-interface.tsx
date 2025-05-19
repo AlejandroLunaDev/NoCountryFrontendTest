@@ -1,4 +1,4 @@
- 'use client';
+'use client';
 
 import { useState, useRef, useEffect } from 'react';
 import { useChat } from '../providers/chat-provider';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
 import { useMarkChatAsRead } from '../hooks/use-chat';
 import { usePresence } from '../providers/presence-provider';
+import type { ChatMember } from '../lib/api';
 
 interface MessageItemProps {
   message: Message;
@@ -75,35 +76,21 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
     if (chat.type === 'GROUP') {
       return chat.name || 'Grupo';
     }
-    
+
     // Para chats individuales, mostrar el nombre del otro usuario
     if (chat.members && Array.isArray(chat.members)) {
-      // Log para depuración
-      console.log('Interface - Chat members:', chat.members);
-      
       // Buscar el miembro que no es el usuario actual
       const otherMember = chat.members.find(m => m.userId !== user?.id);
-      console.log('Interface - Current user ID:', user?.id);
-      console.log('Interface - Other member found:', otherMember);
-      
+
       // Usar nombre del objeto user anidado, email, o un fallback
       if (otherMember) {
-        // El nombre está en otherMember.user.name
-        if (otherMember.user && otherMember.user.name) 
-          return otherMember.user.name;
-        
-        // Fallback a email si existe
-        if (otherMember.user && otherMember.user.email) 
-          return otherMember.user.email.split('@')[0];
-          
-        // Fallback si no hay user o name
-        if (otherMember.name) 
-          return otherMember.name;
+        // Usar el nombre del miembro
+        return otherMember.name || 'Usuario';
       }
-      
+
       return 'Usuario';
     }
-    
+
     return chat.name || 'Chat';
   };
 
@@ -140,9 +127,12 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
             .filter(c => c.type === 'PRIVATE')
             .map(chat => {
               // Detectar si algún miembro está online
-              const hasOnlineMember = chat.members && 
-                chat.members.some(m => m.userId !== user?.id && isUserOnline(m.userId));
-              
+              const hasOnlineMember =
+                chat.members &&
+                chat.members.some(
+                  m => m.userId !== user?.id && isUserOnline(m.userId)
+                );
+
               return (
                 <div
                   key={chat.id}
@@ -169,7 +159,7 @@ function ChatList({ chats, onSelectChat, selectedChatId }: ChatListProps) {
 }
 
 interface MemberSidebarProps {
-  members: Chat['members'];
+  members: ChatMember[];
 }
 
 function MemberSidebar({ members }: MemberSidebarProps) {
@@ -179,35 +169,20 @@ function MemberSidebar({ members }: MemberSidebarProps) {
         MIEMBROS - {members && members.length ? members.length : 0}
       </h3>
       <div className='space-y-2'>
-        {members && members.map(member => (
-          <div
-            key={member.id}
-            className='flex items-center text-zinc-300 hover:bg-zinc-700 rounded p-1 cursor-pointer'
-          >
-            <div className='w-8 h-8 rounded-full bg-zinc-300 mr-2 flex items-center justify-center'>
-              {member.name.substring(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <div className='text-sm font-semibold'>{member.name}</div>
-              <div
-                className={cn(
-                  'text-xs',
-                  member.status === 'ONLINE'
-                    ? 'text-green-500'
-                    : member.status === 'AWAY'
-                    ? 'text-yellow-500'
-                    : 'text-zinc-500'
-                )}
-              >
-                {member.status === 'ONLINE'
-                  ? 'En línea'
-                  : member.status === 'AWAY'
-                  ? 'Ausente'
-                  : 'Desconectado'}
+        {members &&
+          members.map(member => (
+            <div
+              key={member.id}
+              className='flex items-center text-zinc-300 hover:bg-zinc-700 rounded p-1 cursor-pointer'
+            >
+              <div className='w-8 h-8 rounded-full bg-zinc-300 mr-2 flex items-center justify-center'>
+                {member.name.substring(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <div className='text-sm font-semibold'>{member.name}</div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
       </div>
     </div>
   );
@@ -219,8 +194,34 @@ export function ChatInterface({ chatId }: { chatId: string }) {
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const markChatAsRead = useMarkChatAsRead();
   const { updatePresence } = usePresence();
+
+  // Inicializar la altura del textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current;
+
+      // Reset height
+      textarea.style.height = 'auto';
+
+      // Calcular si el texto tiene una o múltiples líneas
+      const lineCount = (textarea.value.match(/\n/g) || []).length + 1;
+      const newHeight = Math.min(textarea.scrollHeight, 150);
+
+      // Aplicar scroll solo si hay múltiples líneas
+      if (lineCount > 1 || newHeight > 24) {
+        textarea.classList.remove('overflow-hidden');
+        textarea.classList.add('overflow-y-auto');
+      } else {
+        textarea.classList.add('overflow-hidden');
+        textarea.classList.remove('overflow-y-auto');
+      }
+
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [messageInput]);
 
   // Función para obtener el nombre a mostrar para un chat individual
   const getChatDisplayName = (chat: Chat) => {
@@ -228,35 +229,20 @@ export function ChatInterface({ chatId }: { chatId: string }) {
     if (chat.type === 'GROUP') {
       return chat.name || 'Grupo';
     }
-    
+
     // Para chats individuales, mostrar el nombre del otro usuario
     if (chat.members && Array.isArray(chat.members)) {
-      // Log para depuración
-      console.log('Interface - Chat members:', chat.members);
-      
       // Buscar el miembro que no es el usuario actual
       const otherMember = chat.members.find(m => m.userId !== user?.id);
-      console.log('Interface - Current user ID:', user?.id);
-      console.log('Interface - Other member found:', otherMember);
-      
-      // Usar nombre del objeto user anidado, email, o un fallback
+
+      // Usar nombre del miembro
       if (otherMember) {
-        // El nombre está en otherMember.user.name
-        if (otherMember.user && otherMember.user.name) 
-          return otherMember.user.name;
-        
-        // Fallback a email si existe
-        if (otherMember.user && otherMember.user.email) 
-          return otherMember.user.email.split('@')[0];
-          
-        // Fallback si no hay user o name
-        if (otherMember.name) 
-          return otherMember.name;
+        return otherMember.name || 'Usuario';
       }
-      
+
       return 'Usuario';
     }
-    
+
     return chat.name || 'Chat';
   };
 
@@ -285,7 +271,7 @@ export function ChatInterface({ chatId }: { chatId: string }) {
 
     // Actualizar presencia al enviar un mensaje
     updatePresence();
-    
+
     setIsSending(true);
     await sendMessage(messageInput.trim());
     setMessageInput('');
@@ -326,7 +312,7 @@ export function ChatInterface({ chatId }: { chatId: string }) {
                 </span>
                 <span className='ml-2 text-zinc-500 text-sm'>
                   {currentChat.type === 'GROUP'
-                    ? 'Canal general'
+                    ? 'Chat grupal'
                     : 'Chat privado'}
                 </span>
               </div>
@@ -354,25 +340,37 @@ export function ChatInterface({ chatId }: { chatId: string }) {
             </div>
 
             {/* Input de mensaje */}
-            <form onSubmit={handleSendMessage} className='p-4 border-t'>
+            <form
+              onSubmit={handleSendMessage}
+              className='p-4 border-t chat-interface'
+            >
               <div className='bg-zinc-100 dark:bg-zinc-700 rounded-lg px-4 py-2 flex items-center'>
-                <input
-                  type='text'
+                <textarea
+                  ref={textareaRef}
                   placeholder={`Enviar un mensaje a ${
                     currentChat.type === 'GROUP'
                       ? `#${currentChat.name}`
                       : getChatDisplayName(currentChat)
                   }`}
-                  className='bg-transparent flex-1 outline-none text-sm'
+                  className='bg-transparent flex-1 outline-none text-sm w-full resize-none overflow-hidden min-h-[24px] max-h-[150px]'
                   value={messageInput}
-                  onChange={e => setMessageInput(e.target.value)}
+                  onChange={e => {
+                    setMessageInput(e.target.value);
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e);
+                    }
+                  }}
                   disabled={isSending}
+                  rows={1}
                 />
                 <Button
                   type='submit'
                   size='icon'
                   variant='ghost'
-                  className='ml-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                  className='ml-2 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 flex-shrink-0'
                   disabled={isSending || !messageInput.trim()}
                 >
                   <svg

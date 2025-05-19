@@ -876,7 +876,7 @@ export function useAddMemberToChat() {
       console.log(`Adding user ${userId} to chat ${chatId}`);
       return chatApi.addMemberToChat(chatId, userId);
     },
-    onSuccess: updatedChat => {
+    onSuccess: (updatedChat, { chatId, userId }) => {
       console.log('Member added successfully to chat:', updatedChat);
 
       // Update the cache with the updated chat
@@ -889,9 +889,27 @@ export function useAddMemberToChat() {
         );
       });
 
-      // If socket connected, join the updated chat
+      // Invalidate messages query to refresh member list
+      queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
+
+      // If socket connected, join the updated chat and notify others about the new member
       if (status === 'connected' && socket) {
+        // Join the chat
         socket.emit('join_chat', { chatId: updatedChat.id, userId: user.id });
+
+        // Explicit notification about new member (for real-time updates)
+        socket.emit('member_added', {
+          chatId: updatedChat.id,
+          userId: userId,
+          actionBy: user.id
+        });
+
+        // También emitir evento de chat actualizado para refrescar en tiempo real
+        socket.emit('chat_updated', {
+          chatId: updatedChat.id,
+          type: 'MEMBER_ADDED',
+          memberId: userId
+        });
       }
 
       // Show success toast
