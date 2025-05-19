@@ -704,7 +704,7 @@ export function useCreateChat() {
       });
 
       // If we're connected to socket, emit an event to join this chat
-      if (status === 'connected' && socket) {
+      if (status === 'connected' && socket && user) {
         console.log('Joining new chat via socket:', newChat.id);
         socket.emit('join_chat', { chatId: newChat.id, userId: user.id });
       }
@@ -892,7 +892,7 @@ export function useAddMemberToChat() {
       queryClient.invalidateQueries({ queryKey: ['messages', chatId] });
 
       // If socket connected, join the updated chat and notify others about the new member
-      if (status === 'connected' && socket) {
+      if (status === 'connected' && socket && user) {
         // Join the chat
         socket.emit('join_chat', { chatId: updatedChat.id, userId: user.id });
 
